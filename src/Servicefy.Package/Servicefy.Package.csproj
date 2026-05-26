@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>true</ImplicitUsings>
+        <LangVersion>Latest</LangVersion>
+
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <NoWarn>RS1041</NoWarn>
+
+        <!-- Package Metadata -->
+        <PackageId>Servicefy</PackageId>
+        <Version>1.0.0</Version>
+        <PackageTags>dependency;injection;di;service;registration;ioc;dotnet</PackageTags>
+        <Description>Source Generator for Dependency Injection</Description>
+        <RepositoryUrl>https://github.com/elixneto/Servicefy</RepositoryUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+    </PropertyGroup>
+    
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.3.0" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="..\..\README.md" Link="README.md" Pack="true" PackagePath="/" />
+        
+        <!-- Roslyn analyzers only need one TFM in the package; net8.0 is used here -->
+        <None Include="$(OutputPath)net8.0\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    </ItemGroup>
+
+</Project>

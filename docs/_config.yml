@@ -1,0 +1,6 @@
+title: Servicefy
+description: Roslyn source generator for zero-reflection, AOT-safe dependency injection registration in .NET
+theme: jekyll-theme-cayman
+url: "https://elixneto.github.io"
+baseurl: "/Servicefy"
+markdown: kramdown
