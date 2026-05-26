@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>        
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>true</ImplicitUsings>
+        <LangVersion>Latest</LangVersion>
+
+        <IncludeBuildOutput>false</IncludeBuildOutput> <!-- Don't include the compiled DLL in the package root -->
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IsRoslynComponent>true</IsRoslynComponent>
+
+        <!-- Package Metadata -->
+        <PackageId>Servicefy</PackageId>
+        <Version>0.1.0</Version>
+        <PackageTags>dependency;injection;di;service;registration;ioc;dotnet</PackageTags>
+        <Description>Source Generator for Dependency Injection.</Description>
+        <RepositoryUrl>https://github.com/elixneto/Servicefy</RepositoryUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+    </PropertyGroup>
+    
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.3.0" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="..\..\README.md" Link="README.md" Pack="true" PackagePath="/" />
+        
+        <!-- (required) Include the compiled DLL as an analyzer in the package -->
+        <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    </ItemGroup>
+
+</Project>
