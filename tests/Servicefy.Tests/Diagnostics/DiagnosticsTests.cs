@@ -82,6 +82,26 @@ public class DiagnosticsTests
     }
 
     [Fact]
+    public void SVCFY002_Keyed_ExplicitServiceType_NotImplemented_ReportsError()
+    {
+        var source = """
+            using TestAssembly;
+            namespace TestAssembly
+            {
+                public interface IMyService { }
+                public interface IOtherService { }
+
+                [AddKeyedScoped("key", typeof(IOtherService))]
+                public class MyService : IMyService { }
+            }
+            """;
+
+        var (_, diagnostics) = CompilationHelper.RunGenerator(source);
+
+        Assert.Contains(diagnostics, d => d.Id == "SVCFY002");
+    }
+
+    [Fact]
     public void SVCFY003_NoInterface_ReportsError()
     {
         var source = """
@@ -89,6 +109,23 @@ public class DiagnosticsTests
             namespace TestAssembly
             {
                 [AddScoped]
+                public class MyService { }
+            }
+            """;
+
+        var (_, diagnostics) = CompilationHelper.RunGenerator(source);
+
+        Assert.Contains(diagnostics, d => d.Id == "SVCFY003");
+    }
+
+    [Fact]
+    public void SVCFY003_Keyed_NoInterface_ReportsError()
+    {
+        var source = """
+            using TestAssembly;
+            namespace TestAssembly
+            {
+                [AddKeyedScoped("key")]
                 public class MyService { }
             }
             """;
@@ -137,5 +174,25 @@ public class DiagnosticsTests
         var (_, diagnostics) = CompilationHelper.RunGenerator(source);
 
         Assert.DoesNotContain(diagnostics, d => d.Id == "SVCFY004");
+    }
+
+    [Fact]
+    public void SVCFY004_Keyed_MultipleInterfaces_ReportsError()
+    {
+        var source = """
+            using TestAssembly;
+            namespace TestAssembly
+            {
+                public interface IServiceA { }
+                public interface IServiceB { }
+
+                [AddKeyedScoped("key")]
+                public class MyService : IServiceA, IServiceB { }
+            }
+            """;
+
+        var (_, diagnostics) = CompilationHelper.RunGenerator(source);
+
+        Assert.Contains(diagnostics, d => d.Id == "SVCFY004");
     }
 }

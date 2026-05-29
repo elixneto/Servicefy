@@ -1,0 +1,25 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Servicefy.Package", "src\Servicefy.Package\Servicefy.Package.csproj", "{F7446A88-7C7F-45A2-9146-98B159DFA70B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Servicefy.Tests", "tests\Servicefy.Tests\Servicefy.Tests.csproj", "{DDE1552D-BD6B-4694-85A0-F4F60186AB8F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F7446A88-7C7F-45A2-9146-98B159DFA70B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F7446A88-7C7F-45A2-9146-98B159DFA70B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F7446A88-7C7F-45A2-9146-98B159DFA70B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F7446A88-7C7F-45A2-9146-98B159DFA70B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DDE1552D-BD6B-4694-85A0-F4F60186AB8F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DDE1552D-BD6B-4694-85A0-F4F60186AB8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DDE1552D-BD6B-4694-85A0-F4F60186AB8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DDE1552D-BD6B-4694-85A0-F4F60186AB8F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

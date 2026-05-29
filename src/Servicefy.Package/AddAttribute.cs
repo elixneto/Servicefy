@@ -2,10 +2,13 @@ namespace Servicefy.Package;
 
 public static class AddAttribute
 {
-    public static string Value(string namespacedName, bool emitGeneric)
+    public static string Value(string namespacedName)
     {
-        var generic = emitGeneric ? $$"""
-
+        return $$"""
+             #pragma warning disable CS8618
+             using System;
+             namespace {{namespacedName}}
+             {
                 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
                 internal sealed class AddAttribute<TService> : Attribute
                 {
@@ -18,17 +21,10 @@ public static class AddAttribute
                     }
                 }
 
-        """ : "";
-
-        return $$"""
-             using System;
-             namespace {{namespacedName}}
-             {
-                {{generic}}
                 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
                 internal sealed class AddAttribute : Attribute
                 {
-                    public Type? ServiceType { get; }
+                    public Type ServiceType { get; }
                     public Lifetime Lifetime { get; }
 
                     public AddAttribute(Lifetime lifetime)

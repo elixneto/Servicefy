@@ -9,13 +9,18 @@ Servicefy is a [Roslyn Source Generator](https://learn.microsoft.com/en-us/dotne
 
 ---
 
+## Requirements
+
+- **.NET 8** or later
+- **C# 12** or later (default for .NET 8+ projects)
+
+---
+
 ## Installation
 
 ```bash
 dotnet add package Servicefy
 ```
-
-> Compatible with any SDK-style project targeting `netstandard2.0` or later (.NET Framework 4.6.1+, .NET Core 2.0+, .NET 5+). All attributes work from **C# 8** onward. The short generic syntax `[AddScoped<IFoo>]` requires **C# 11+** and is automatically omitted by the generator on older versions — no configuration needed; use `[AddScoped(typeof(IFoo))]` as a drop-in alternative.
 
 ---
 
@@ -29,6 +34,9 @@ public sealed class UserService : IUserService { }
 
 [AddTransient]
 public sealed class EmailNotificationHandler : INotificationHandler { }
+
+[AddKeyedScoped("primary")]
+public sealed class PrimaryDbRepository : IRepository { }
 
 [Configure("App:Database", Lifetime.Singleton)]
 public sealed class DatabaseSettings
@@ -51,34 +59,58 @@ Servicefy generates the `AddServicefy` extension method for you at build time, s
 
 ## Attributes
 
+### Standard registrations
+
 | Attribute | Equivalent |
 |---|---|
 | `[AddScoped]` | `services.AddScoped<IFoo, Foo>()` |
 | `[AddSingleton]` | `services.AddSingleton<IFoo, Foo>()` |
 | `[AddTransient]` | `services.AddTransient<IFoo, Foo>()` |
-| `[AddScoped(typeof(IFoo))]` | `services.AddScoped<IFoo, Foo>()` (explicit contract, C# 7+) |
-| `[AddScoped<IFoo>]` | `services.AddScoped<IFoo, Foo>()` (explicit contract, C# 11+) |
+| `[AddScoped(typeof(IFoo))]` | `services.AddScoped<IFoo, Foo>()` (explicit contract) |
+| `[AddScoped<IFoo>]` | `services.AddScoped<IFoo, Foo>()` (explicit contract, generic syntax) |
 | `[Add(Lifetime.Scoped)]` | `services.AddScoped<IFoo, Foo>()` |
-| `[Add(Lifetime.Scoped, typeof(IFoo))]` | `services.AddScoped<IFoo, Foo>()` (explicit contract, C# 7+) |
+| `[Add(Lifetime.Scoped, typeof(IFoo))]` | `services.AddScoped<IFoo, Foo>()` (explicit contract) |
 | `[Configure("Section", Lifetime.Singleton)]` | `services.AddSingleton(_ => config.GetSection(...).Get<T>())` |
+
+### Keyed registrations (.NET 8+)
+
+| Attribute | Equivalent |
+|---|---|
+| `[AddKeyedScoped("key")]` | `services.AddKeyedScoped<IFoo, Foo>("key")` |
+| `[AddKeyedSingleton("key")]` | `services.AddKeyedSingleton<IFoo, Foo>("key")` |
+| `[AddKeyedTransient("key")]` | `services.AddKeyedTransient<IFoo, Foo>("key")` |
+| `[AddKeyedScoped("key", typeof(IFoo))]` | `services.AddKeyedScoped<IFoo, Foo>("key")` (explicit contract) |
+| `[AddKeyedScoped<IFoo>("key")]` | `services.AddKeyedScoped<IFoo, Foo>("key")` (generic syntax) |
+
+The service key can be any compile-time constant — `string`, `int`, etc.
 
 ### Service type inference
 
 - **Inferred** (`[AddScoped]`): Servicefy infers the service type from the single interface the class implements. If the class implements zero or more than one interface, a compile-time error is raised.
-- **Explicit via `typeof`** (`[AddScoped(typeof(IFoo))]`): Registers against the specified contract. Works on **C# 7+**. Ideal for projects not yet on C# 11, or when targeting multiple contracts on the same class.
-- **Explicit via generic** (`[AddScoped<IFoo>]`): Same behavior, shorter syntax. Requires **C# 11+**. The generator detects the language version automatically and omits the generic attribute variants on C# 8–10, so the package compiles cleanly regardless of target version.
+- **Explicit via `typeof`** (`[AddScoped(typeof(IFoo))]`): Registers against the specified contract.
+- **Explicit via generic** (`[AddScoped<IFoo>]`): Same behavior, shorter syntax.
 - **Multiple registrations**: Stack multiple attributes on the same class to register it under several contracts.
 
 ```csharp
-// C# 7+
-[AddScoped(typeof(IUserReader))]
-[AddScoped(typeof(IUserWriter))]
-public class UserRepository : IUserReader, IUserWriter { }
-
-// C# 11+
 [AddScoped<IUserReader>]
 [AddScoped<IUserWriter>]
 public class UserRepository : IUserReader, IUserWriter { }
+
+// Keyed + regular on the same class
+[AddScoped]
+[AddKeyedScoped("named")]
+public class MyService : IMyService { }
+```
+
+### Keyed service resolution
+
+Resolve a keyed service using the `[FromKeyedServices]` attribute or `IServiceProvider.GetRequiredKeyedService<T>()`:
+
+```csharp
+public class MyController(
+    IMyService defaultService,
+    [FromKeyedServices("named")] IMyService namedService)
+{ }
 ```
 
 ---
@@ -113,8 +145,6 @@ builder.Services.AddServicefy(builder.Configuration); // registers Feature1 + Fe
 
 Servicefy decorates each generated `ServicefyExtensions` with a `[ServicefyAggregates(...)]` marker listing the namespaces it already covers. When building an aggregator, Servicefy reads these markers from all direct references and automatically excludes any namespace already covered further down the chain.
 
-This means that even if a project directly references both an aggregator assembly and one of the assemblies it aggregates, Servicefy will emit only the top-level call — eliminating the risk of double-registration regardless of project structure.
-
 ---
 
 ## Diagnostics
@@ -124,9 +154,9 @@ Servicefy reports the following compile-time errors:
 | Code       | Description |
 |------------|---|
 | `SVCFY001` | `[Add]` attribute used without specifying a `Lifetime`. |
-| `SVCFY002` | Generic `[AddScoped<T>]` used but the class does not implement `T`. |
-| `SVCFY003` | Non-generic `[AddScoped]` used on a class that implements no interfaces. |
-| `SVCFY004` | Non-generic `[AddScoped]` used on a class that implements multiple interfaces — ambiguous. |
+| `SVCFY002` | Generic `[AddScoped<T>]` or explicit `typeof(T)` used but the class does not implement `T`. |
+| `SVCFY003` | Non-generic `[AddScoped]` / `[AddKeyedScoped]` used on a class that implements no interfaces. |
+| `SVCFY004` | Non-generic `[AddScoped]` / `[AddKeyedScoped]` used on a class that implements multiple interfaces — ambiguous. |
 | `SVCFY005` | `[Configure]` attribute is missing `sectionName` or `Lifetime`. |
 | `SVCFY006` | `[Configure]` used on a class without a parameterless constructor. |
 

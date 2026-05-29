@@ -1,39 +1,39 @@
-using System.Text;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
+using Servicefy.Package.Generators.Emit;
 
 namespace Servicefy.Package.Generators;
 
+/// <summary>
+/// Entry point for the Servicefy incremental source generator.
+/// Responsible only for wiring the three pipeline stages into the Roslyn
+/// <see cref="IncrementalGeneratorInitializationContext"/>; all logic lives in
+/// the <c>Emit/</c> classes.
+/// </summary>
 [Generator]
-public class ServicefyGenerator : IIncrementalGenerator
+public sealed class ServicefyGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        context.RegisterSourceOutput(context.CompilationProvider, EmitAttributes);
+        // 1. Emit generated attribute source files (Lifetime, AddScoped, AddKeyed*, …)
+        context.RegisterSourceOutput(
+            context.CompilationProvider,
+            AttributeEmitter.Emit);
 
-        var classDeclarations = context.SyntaxProvider
+        // 2. Validate attribute usage and report compile-time diagnostics
+        var annotatedClasses = context.SyntaxProvider
             .CreateSyntaxProvider(
-                predicate: static (s, _) => s is ClassDeclarationSyntax cds && cds.AttributeLists.Count > 0,
-                transform: static (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
-            .Where(c => c is not null);
+                predicate: static (node, _) => node is ClassDeclarationSyntax { AttributeLists.Count: > 0 },
+                transform: static (ctx,  _) => (ClassDeclarationSyntax)ctx.Node)
+            .Where(static c => c is not null);
 
-        context.RegisterSourceOutput(context.CompilationProvider.Combine(classDeclarations.Collect()), ServicefyGeneratorDiagnostics.Emit);
-        context.RegisterSourceOutput(context.CompilationProvider, ServicefyGeneratorRegistrations.Emit);
-    }
-    
-    private static void EmitAttributes(SourceProductionContext spc, Compilation compilation)
-    {
-        var ns = compilation.AssemblyName ?? "Servicefy";
-        var emitGeneric = compilation is CSharpCompilation { LanguageVersion: >= LanguageVersion.CSharp11 };
+        context.RegisterSourceOutput(
+            context.CompilationProvider.Combine(annotatedClasses.Collect()),
+            DiagnosticsEmitter.Emit);
 
-        spc.AddSource("Lifetime.g.cs", SourceText.From(LifetimeEnum.Value(ns), Encoding.UTF8));
-        spc.AddSource("AddAttribute.g.cs", SourceText.From(AddAttribute.Value(ns, emitGeneric), Encoding.UTF8));
-        spc.AddSource("AddScopedAttribute.g.cs", SourceText.From(AddScopedAttribute.Value(ns, emitGeneric), Encoding.UTF8));
-        spc.AddSource("AddSingletonAttribute.g.cs", SourceText.From(AddSingletonAttribute.Value(ns, emitGeneric), Encoding.UTF8));
-        spc.AddSource("AddTransientAttribute.g.cs", SourceText.From(AddTransientAttribute.Value(ns, emitGeneric), Encoding.UTF8));
-        spc.AddSource("ConfigureAttribute.g.cs", SourceText.From(ConfigureAttribute.Value(ns), Encoding.UTF8));
-        spc.AddSource("ServicefyAggregatesAttribute.g.cs", SourceText.From(ServicefyAggregatesAttribute.Value(ns), Encoding.UTF8));
+        // 3. Collect all service registrations and emit ServicefyExtensions.*.g.cs
+        context.RegisterSourceOutput(
+            context.CompilationProvider,
+            RegistrationEmitter.Emit);
     }
 }

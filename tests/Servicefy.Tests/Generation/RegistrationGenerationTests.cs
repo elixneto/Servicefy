@@ -20,9 +20,8 @@ public class RegistrationGenerationTests
             """;
 
         var (output, _) = CompilationHelper.RunGenerator(source);
-        
-        var extensions = output.GetTypeByMetadataName("TestAssembly.ServicefyExtensions");
-        Assert.NotNull(extensions);
+
+        Assert.NotNull(output.GetTypeByMetadataName("TestAssembly.ServicefyExtensions"));
     }
 
     [Fact]
@@ -126,6 +125,32 @@ public class RegistrationGenerationTests
     }
 
     [Fact]
+    public void AddScoped_GenericSyntax_RegistersCorrectly()
+    {
+        var source = """
+            using TestAssembly;
+            namespace TestAssembly
+            {
+                public interface IMyService { }
+
+                [AddScoped<IMyService>]
+                public class MyService : IMyService { }
+            }
+            """;
+
+        var (output, diagnostics) = CompilationHelper.RunGenerator(source);
+
+        Assert.Empty(diagnostics);
+        var generatedSource = output.SyntaxTrees
+            .Select(t => t.ToString())
+            .FirstOrDefault(s => s.Contains("ServicefyExtensions"));
+
+        Assert.NotNull(generatedSource);
+        Assert.Contains("IMyService", generatedSource);
+        Assert.Contains("MyService", generatedSource);
+    }
+
+    [Fact]
     public void NoAnnotatedClasses_DoesNotGenerateServicefyExtensions()
     {
         var source = """
@@ -137,7 +162,6 @@ public class RegistrationGenerationTests
 
         var (output, _) = CompilationHelper.RunGenerator(source);
 
-        var extensions = output.GetTypeByMetadataName("TestAssembly.ServicefyExtensions");
-        Assert.Null(extensions);
+        Assert.Null(output.GetTypeByMetadataName("TestAssembly.ServicefyExtensions"));
     }
 }
