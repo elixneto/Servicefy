@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest a new attribute, convention, or generator capability.
+labels: [ enhancement ]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: The registration pattern or use case that's currently awkward or impossible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API
+      description: What the attribute, convention method, or generated code might look like.
+      render: csharp
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to achieve this (existing attributes/conventions, manual registration, etc.) and why they fall short.
+    validations:
+      required: false

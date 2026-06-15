@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://elixneto.github.io/Servicefy/
+    about: Check the docs before opening an issue — attributes, conventions, decorators and diagnostics are all documented here.

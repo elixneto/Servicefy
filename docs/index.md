@@ -57,8 +57,7 @@ registered via `[AddScoped]` or via `.ByNamespace(...)` / `.ByBaseType(...)`. Se
 
 ## Diagnostics
 
-All compile-time errors and validation rules are listed on the [Diagnostics](diagnostics.md) page
-(`SVCFY001`–`SVCFY014`).
+All compile-time errors and validation rules are listed on the [Diagnostics](diagnostics.md) page.
 
 ## Troubleshooting
 

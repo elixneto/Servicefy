@@ -57,4 +57,4 @@ services.AddScoped<IUserNotifier, UserService>();
 
 ## Diagnostics
 
-See [Diagnostics](../diagnostics.md) for the full list of compile-time checks (`SVCFY001`–`SVCFY014`).
+See [Diagnostics](../diagnostics.md) for the full list of compile-time checks.

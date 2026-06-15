@@ -1,0 +1,55 @@
+name: Bug report
+description: Something generates the wrong code, fails to generate, or reports an incorrect diagnostic.
+labels: [ bug ]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the incorrect behavior, including any diagnostic codes (e.g. SVCFY00x) involved.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal repro
+      description: >
+        The smallest set of classes/attributes/conventions that reproduce the issue.
+        This is the most important part of the report — Servicefy's behavior is entirely
+        about what gets generated for a given input.
+      render: csharp
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs. actual generated code (or diagnostic)
+      description: What you expected to be generated/reported, and what was actually generated/reported instead.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Servicefy version
+      placeholder: e.g. 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: tfm
+    attributes:
+      label: Target framework(s)
+      placeholder: e.g. net8.0, net10.0, Blazor WebAssembly, AOT-published
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional Info
+      description: SDK version, IDE, build output, etc.
+    validations:
+      required: false

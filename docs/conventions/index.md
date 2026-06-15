@@ -24,7 +24,7 @@ services.AddServicefyConventions()
 | Convention | Description |
 |------------|-------------|
 | [`ByNamespace`](by-namespace.md) | Registers every type whose namespace matches a predicate, against its directly implemented interfaces. |
-| [`ByBaseType`](by-base-type.md) | Scrutor-style "assignable to" scanning — registers every type assignable to `TBase`. |
+| [`ByBaseType`](by-base-type.md) | Registers every type assignable to `TBase`. |
 | [`ByNamespaceOf`](by-namespace-of.md) | Like `ByNamespace`, but restricted to the namespace (or sub-namespaces) of a marker type `TMarker`. |
 | [`ByTypeName`](by-type-name.md) | Registers every type whose namespace **and** type name match a two-parameter predicate. |
 

@@ -58,3 +58,39 @@ dotnet build
 **Rider** — File > Invalidate Caches > Restart
 \
 **VS** — Restarting the VS analyzer host (or the IDE itself) 
+
+## BenchmarkDotNet — "duplicate class" errors
+
+By default, [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet) builds each benchmark into a **separate generated project** and compiles
+it from scratch. Since Servicefy is a Roslyn source generator, it runs again during that build — and
+ends up emitting the same generated types (e.g. `AddScopedAttribute`, `Lifetime`,
+`ServicefyExtensions`) that already exist in the assembly being benchmarked, which the new project also
+references. The result is a compile error about duplicate/ambiguous types.
+
+To avoid this, run the benchmark **in-process** instead of building an isolated project:
+
+```csharp
+var config = ManualConfig
+    .Create(DefaultConfig.Instance)
+    .AddJob(
+      Job.Default.WithToolchain(InProcessNoEmitToolchain.Instance)
+    );
+
+BenchmarkRunner.Run<MyBenchmarkClass>(config);
+```
+
+- **`InProcessNoEmitToolchain.Instance`** — runs the benchmark in the current process instead of
+  generating and compiling a separate project. Since no new compilation happens, the source generator
+  doesn't run a second time and there's no duplicate-type conflict.
+
+### Caveats of running in-process
+
+- **No process isolation.** The default toolchain runs each benchmark in a fresh, clean process.
+  In-process, everything runs inside the runner's own process, so GC activity and any `static` state
+  from one benchmark can bleed into another. Watch out for benchmarks that cache singletons or other state in `static`
+  fields.
+- **No multi-runtime comparisons.** You can't compare `net8.0` vs `net9.0`, etc. in the same run —
+  everything executes on the runtime of the host process.
+
+These caveats mostly affect *absolute* numbers and edge cases. The impact is minimal as long as you run from a
+Release build.
