@@ -4,8 +4,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Servicefy.Package", "src\Se
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Servicefy.Tests", "tests\Servicefy.Tests\Servicefy.Tests.csproj", "{DDE1552D-BD6B-4694-85A0-F4F60186AB8F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Servicefy.ConsoleAppTest", "tests\Servicefy.ConsoleAppTest\Servicefy.ConsoleAppTest.csproj", "{DEDBD54A-DEBC-4DC2-AAB2-AC06854C6E46}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,10 +18,6 @@ Global
 		{DDE1552D-BD6B-4694-85A0-F4F60186AB8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DDE1552D-BD6B-4694-85A0-F4F60186AB8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DDE1552D-BD6B-4694-85A0-F4F60186AB8F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{DEDBD54A-DEBC-4DC2-AAB2-AC06854C6E46}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{DEDBD54A-DEBC-4DC2-AAB2-AC06854C6E46}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{DEDBD54A-DEBC-4DC2-AAB2-AC06854C6E46}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{DEDBD54A-DEBC-4DC2-AAB2-AC06854C6E46}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
