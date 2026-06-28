@@ -50,13 +50,22 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
             context.CompilationProvider.Combine(byNamespaceRules.Collect()),
             ByNamespaceRegistrationEmitter.Emit);
 
-        // 4. Collect .ByBaseType<TBase>(lifetime, selector, attribute) call sites
-        var byBaseTypeRules = context.SyntaxProvider
+        // 4. Collect .ByBaseType<TBase>(...) and .ByBaseType(typeof(IFoo<>), ...) call sites
+        var byBaseTypeResults = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => ByBaseTypeCallCollector.IsCandidate(node),
-                transform: static (ctx, _) => ByBaseTypeCallCollector.Transform(ctx))
-            .Where(static rule => rule is not null)
-            .Select(static (rule, _) => rule!);
+                transform: static (ctx, _) => ByBaseTypeCallCollector.Transform(ctx));
+
+        context.RegisterSourceOutput(byBaseTypeResults.Collect(), static (spc, results) =>
+        {
+            foreach (var (_, diagnostic) in results)
+                if (diagnostic is not null)
+                    spc.ReportDiagnostic(diagnostic);
+        });
+
+        var byBaseTypeRules = byBaseTypeResults
+            .Where(static r => r.Rule is not null)
+            .Select(static (r, _) => r.Rule!);
 
         // 5. Implement ServicefyConventionsBuilder.ApplyByBaseType for each rule
         context.RegisterSourceOutput(
