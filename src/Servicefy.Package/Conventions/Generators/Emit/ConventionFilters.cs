@@ -70,6 +70,13 @@ internal static class ConventionFilters
         INamedTypeSymbol type, HashSet<IAssemblySymbol> projectReferenceAssemblies) =>
         type.Interfaces.Where(i => IsUserDefinedInterface(i, projectReferenceAssemblies));
 
+    // Like GetRegistrableInterfaces but over the type's full interface set (AllInterfaces),
+    // so inherited and transitive interfaces — including closed generic ones like
+    // IRepository<Cliente> reached via a base class or a derived interface — are included.
+    internal static IEnumerable<INamedTypeSymbol> GetAllRegistrableInterfaces(
+        INamedTypeSymbol type, HashSet<IAssemblySymbol> projectReferenceAssemblies) =>
+        type.AllInterfaces.Where(i => IsUserDefinedInterface(i, projectReferenceAssemblies));
+
     internal static bool IsUserDefinedInterface(INamedTypeSymbol iface, HashSet<IAssemblySymbol> projectReferenceAssemblies) =>
         iface.Locations.Any(l => l.IsInSource) || projectReferenceAssemblies.Contains(iface.ContainingAssembly);
 

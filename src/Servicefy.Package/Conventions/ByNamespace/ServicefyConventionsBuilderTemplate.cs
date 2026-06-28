@@ -84,6 +84,41 @@ internal static class ServicefyConventionsBuilderTemplate
                          Type matchAttribute = null);
 
                      /// <summary>
+                     /// Open-generic counterpart of <see cref="ByBaseType{TBase}"/>: registers every
+                     /// concrete, non-abstract, non-generic class that implements (or derives from) a
+                     /// constructed form of <paramref name="openGenericBaseType"/>. For example,
+                     /// <c>ByBaseType(typeof(IRepository&lt;&gt;), Lifetime.Scoped)</c> matches
+                     /// <c>ClienteRepository : MongoRepository&lt;Cliente&gt;, IClienteRepository</c>
+                     /// (because it ultimately implements <c>IRepository&lt;Cliente&gt;</c>).
+                     /// </summary>
+                     /// <param name="openGenericBaseType">
+                     /// An unbound generic type, e.g. <c>typeof(IRepository&lt;&gt;)</c> or
+                     /// <c>typeof(MongoRepository&lt;&gt;)</c>. A closed (<c>typeof(IRepository&lt;Cliente&gt;)</c>)
+                     /// or non-generic type reports SVCFY016 and the call site is ignored — use
+                     /// <see cref="ByBaseType{TBase}"/> for those.
+                     /// </param>
+                     /// <param name="lifetime">The lifetime used for every matched registration.</param>
+                     /// <param name="selector">
+                     /// Controls which type(s) each matched class is registered as:
+                     /// <see cref="ServiceTypeSelector.BaseType"/> (default) registers against the
+                     /// constructed form it implements (e.g. <c>IRepository&lt;Cliente&gt;</c>);
+                     /// <see cref="ServiceTypeSelector.ImplementedInterfaces"/> registers the directly
+                     /// declared interfaces (e.g. <c>IClienteRepository</c>);
+                     /// <see cref="ServiceTypeSelector.AllImplementedInterfaces"/> registers both.
+                     /// </param>
+                     /// <param name="matchAttribute">
+                     /// When set, only candidates with this attribute applied <b>directly</b> to the
+                     /// concrete class (no inheritance) are matched.
+                     /// </param>
+                     /// <returns>The same builder, for chaining additional convention calls.</returns>
+                     /// <seealso href="https://elixneto.github.io/Servicefy/conventions/by-base-type">ByBaseType — Servicefy docs</seealso>
+                     IServicefyConventionsBuilder ByBaseType(
+                         Type openGenericBaseType,
+                         Lifetime lifetime,
+                         ServiceTypeSelector selector = ServiceTypeSelector.BaseType,
+                         Type matchAttribute = null);
+
+                     /// <summary>
                      /// Like <see cref="ByNamespace"/>, but candidates are first restricted to the
                      /// namespace of <typeparamref name="TMarker"/> (or one of its sub-namespaces)
                      /// before <paramref name="predicate"/> is evaluated. Useful for scoping a
@@ -176,6 +211,17 @@ internal static class ServicefyConventionsBuilderTemplate
                          Type matchAttribute = null)
                      {
                          ApplyByBaseType(typeof(TBase), lifetime, selector, matchAttribute);
+                         return this;
+                     }
+
+                     /// <inheritdoc />
+                     public IServicefyConventionsBuilder ByBaseType(
+                         Type openGenericBaseType,
+                         Lifetime lifetime,
+                         ServiceTypeSelector selector = ServiceTypeSelector.BaseType,
+                         Type matchAttribute = null)
+                     {
+                         ApplyByBaseType(openGenericBaseType, lifetime, selector, matchAttribute);
                          return this;
                      }
 
