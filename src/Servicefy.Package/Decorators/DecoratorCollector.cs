@@ -12,6 +12,49 @@ namespace Servicefy.Package.Decorators;
 /// </summary>
 internal static class DecoratorCollector
 {
+    /// <summary>
+    /// Collects <c>.Decorate(typeof(IFoo&lt;&gt;), typeof(Decorator&lt;&gt;))</c> calls into one merged,
+    /// declaration-ordered chain per unbound service definition. These are expanded into closed
+    /// <see cref="InterfaceDecoratorEntry"/> instances by the registration emitter, once the concrete
+    /// closed services a convention registers are known.
+    /// </summary>
+    internal static List<(INamedTypeSymbol UnboundService, List<INamedTypeSymbol> UnboundDecorators, Location Location)> CollectOpenGenericChains(
+        Compilation compilation)
+    {
+        var byService = new Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol Decorator, Location Location)>>(
+            SymbolEqualityComparer.Default);
+
+        foreach (var (service, decorator, location) in DecorateCallCollector.CollectOpenGeneric(compilation))
+        {
+            if (!byService.TryGetValue(service, out var list))
+                byService[service] = list = [];
+
+            list.Add((decorator, location));
+        }
+
+        var chains = new List<(INamedTypeSymbol, List<INamedTypeSymbol>, Location)>();
+        foreach (var (service, list) in byService)
+        {
+            // Same fluent-chain ordering as the closed collector: sort by source span end so the
+            // layers come out in left-to-right declaration order.
+            list.Sort((a, b) =>
+            {
+                var pathCompare = string.CompareOrdinal(a.Location.SourceTree?.FilePath, b.Location.SourceTree?.FilePath);
+                return pathCompare != 0 ? pathCompare : a.Location.SourceSpan.End.CompareTo(b.Location.SourceSpan.End);
+            });
+
+            var decorators = new List<INamedTypeSymbol>();
+            var seen = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+            foreach (var (decorator, _) in list)
+                if (seen.Add(decorator))
+                    decorators.Add(decorator);
+
+            chains.Add((service, decorators, list[0].Location));
+        }
+
+        return chains;
+    }
+
     internal static List<InterfaceDecoratorEntry> CollectDecoratorEntries(Compilation compilation)
     {
         var allTypes = TypeCollector.GetAllAccessibleTypes(compilation)
@@ -141,20 +184,51 @@ internal static class DecoratorCollector
 
             if (decoratorFqns.Count == 0) continue;
 
-            var assemblyKey = SymbolEqualityComparer.Default.Equals(serviceType.ContainingAssembly, compilation.Assembly)
-                ? compilation.AssemblyName ?? "Servicefy"
-                : serviceType.ContainingAssembly.Name;
-
-            var typeNs = serviceType.ContainingNamespace is { IsGlobalNamespace: false } ns
-                ? ns.ToDisplayString()
-                : assemblyKey;
-
-            var interfaceFqn = serviceType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            entries.Add(new InterfaceDecoratorEntry(
-                assemblyKey, typeNs, interfaceFqn, serviceType,
-                decoratorFqns, decoratorSymbols, diagnosticLocation, duplicateDecorators));
+            entries.Add(CreateEntry(
+                compilation, serviceType, decoratorFqns, decoratorSymbols, diagnosticLocation, duplicateDecorators));
         }
 
         return entries;
+    }
+
+    /// <summary>
+    /// Builds an <see cref="InterfaceDecoratorEntry"/> for <paramref name="serviceType"/> with the
+    /// given (already ordered) decorator chain, computing the assembly key / namespace the same way
+    /// as the closed-form collector. Used both internally and when synthesizing closed entries from
+    /// open-generic <c>.Decorate(typeof(IFoo&lt;&gt;), typeof(Decorator&lt;&gt;))</c> chains.
+    /// </summary>
+    internal static InterfaceDecoratorEntry CreateEntry(
+        Compilation compilation,
+        INamedTypeSymbol serviceType,
+        IReadOnlyList<INamedTypeSymbol> decorators,
+        Location? location) =>
+        CreateEntry(
+            compilation,
+            serviceType,
+            decorators.Select(d => d.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)).ToList(),
+            decorators.ToList(),
+            location,
+            []);
+
+    private static InterfaceDecoratorEntry CreateEntry(
+        Compilation compilation,
+        INamedTypeSymbol serviceType,
+        IReadOnlyList<string> decoratorFqns,
+        IReadOnlyList<INamedTypeSymbol> decoratorSymbols,
+        Location? diagnosticLocation,
+        IReadOnlyList<(string DecoratorFqn, Location? Location)> duplicateDecorators)
+    {
+        var assemblyKey = SymbolEqualityComparer.Default.Equals(serviceType.ContainingAssembly, compilation.Assembly)
+            ? compilation.AssemblyName ?? "Servicefy"
+            : serviceType.ContainingAssembly.Name;
+
+        var typeNs = serviceType.ContainingNamespace is { IsGlobalNamespace: false } ns
+            ? ns.ToDisplayString()
+            : assemblyKey;
+
+        var interfaceFqn = serviceType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        return new InterfaceDecoratorEntry(
+            assemblyKey, typeNs, interfaceFqn, serviceType,
+            decoratorFqns, decoratorSymbols, diagnosticLocation, duplicateDecorators);
     }
 }

@@ -70,6 +70,16 @@ Classes with no interfaces, abstract/static classes and open generics are skippe
 
 `ByNamespaceOf<TMarker>` behaves like `ByNamespace`, but only considers types in `TMarker`'s namespace (or a sub-namespace of it) before applying the predicate — handy for scoping a convention to one module without hardcoding its namespace as a string. `ByTypeName` matches on both namespace and type name.
 
+`ByBaseType` registers every class assignable to a base type or interface, with a `ServiceTypeSelector` controlling what each match is registered as. It also has a `typeof(IFoo<>)` overload for **open generics** — an open implementation like `Repository<T> : IRepository<T>` is registered as `Add(typeof(IRepository<>), typeof(Repository<>))`, so any `IRepository<Order>` resolves to `Repository<Order>`:
+
+```csharp
+builder.Services.AddServicefyConventions()
+    .ByBaseType<IService>(Lifetime.Scoped)                              // closed/non-generic
+    .ByBaseType(typeof(IRepository<>), Lifetime.Scoped);               // open generic
+```
+
+See [ByBaseType › Open generics](docs/conventions/by-base-type.md#open-generics) for matching rules, selectors and AOT-safe open-generic decorators.
+
 ---
 
 ## Decorator pattern

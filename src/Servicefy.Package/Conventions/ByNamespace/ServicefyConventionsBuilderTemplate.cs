@@ -84,6 +84,41 @@ internal static class ServicefyConventionsBuilderTemplate
                          Type matchAttribute = null);
 
                      /// <summary>
+                     /// Open-generic counterpart of <see cref="ByBaseType{TBase}"/>: registers every
+                     /// concrete, non-abstract, non-generic class that implements (or derives from) a
+                     /// constructed form of <paramref name="openGenericBaseType"/>. For example,
+                     /// <c>ByBaseType(typeof(IRepository&lt;&gt;), Lifetime.Scoped)</c> matches
+                     /// <c>ClienteRepository : MongoRepository&lt;Cliente&gt;, IClienteRepository</c>
+                     /// (because it ultimately implements <c>IRepository&lt;Cliente&gt;</c>).
+                     /// </summary>
+                     /// <param name="openGenericBaseType">
+                     /// An unbound generic type, e.g. <c>typeof(IRepository&lt;&gt;)</c> or
+                     /// <c>typeof(MongoRepository&lt;&gt;)</c>. A closed (<c>typeof(IRepository&lt;Cliente&gt;)</c>)
+                     /// or non-generic type reports SVCFY016 and the call site is ignored — use
+                     /// <see cref="ByBaseType{TBase}"/> for those.
+                     /// </param>
+                     /// <param name="lifetime">The lifetime used for every matched registration.</param>
+                     /// <param name="selector">
+                     /// Controls which type(s) each matched class is registered as:
+                     /// <see cref="ServiceTypeSelector.BaseType"/> (default) registers against the
+                     /// constructed form it implements (e.g. <c>IRepository&lt;Cliente&gt;</c>);
+                     /// <see cref="ServiceTypeSelector.ImplementedInterfaces"/> registers the directly
+                     /// declared interfaces (e.g. <c>IClienteRepository</c>);
+                     /// <see cref="ServiceTypeSelector.AllImplementedInterfaces"/> registers both.
+                     /// </param>
+                     /// <param name="matchAttribute">
+                     /// When set, only candidates with this attribute applied <b>directly</b> to the
+                     /// concrete class (no inheritance) are matched.
+                     /// </param>
+                     /// <returns>The same builder, for chaining additional convention calls.</returns>
+                     /// <seealso href="https://elixneto.github.io/Servicefy/conventions/by-base-type">ByBaseType — Servicefy docs</seealso>
+                     IServicefyConventionsBuilder ByBaseType(
+                         Type openGenericBaseType,
+                         Lifetime lifetime,
+                         ServiceTypeSelector selector = ServiceTypeSelector.BaseType,
+                         Type matchAttribute = null);
+
+                     /// <summary>
                      /// Like <see cref="ByNamespace"/>, but candidates are first restricted to the
                      /// namespace of <typeparamref name="TMarker"/> (or one of its sub-namespaces)
                      /// before <paramref name="predicate"/> is evaluated. Useful for scoping a
@@ -141,6 +176,25 @@ internal static class ServicefyConventionsBuilderTemplate
                      /// </summary>
                      /// <returns>The same builder, for chaining additional convention calls.</returns>
                      IServicefyConventionsBuilder Decorate<TService, TDecorator>();
+
+                     /// <summary>
+                     /// Open-generic counterpart of <see cref="Decorate{TService,TDecorator}"/>: adds
+                     /// <paramref name="openGenericDecorator"/> (e.g. <c>typeof(LoggingRepository&lt;&gt;)</c>)
+                     /// as an outer decorator layer for every <b>closed</b> form of
+                     /// <paramref name="openGenericService"/> (e.g. <c>typeof(IRepository&lt;&gt;)</c>) that a
+                     /// convention registers against a concrete type known at compile time — so
+                     /// <c>IRepository&lt;Cliente&gt;</c> is wrapped by <c>LoggingRepository&lt;Cliente&gt;</c>.
+                     /// </summary>
+                     /// <remarks>
+                     /// Only closed forms present in the compilation are decorated; a type closed solely at
+                     /// runtime (resolved through the open-generic passthrough <c>Add(typeof(IRepository&lt;&gt;),
+                     /// typeof(Repository&lt;&gt;))</c>) is <b>not</b> decorated, because decorating an open
+                     /// generic at runtime would require reflection and is not AOT-safe.
+                     /// </remarks>
+                     /// <param name="openGenericService">The unbound service, e.g. <c>typeof(IRepository&lt;&gt;)</c>.</param>
+                     /// <param name="openGenericDecorator">The unbound decorator, e.g. <c>typeof(LoggingRepository&lt;&gt;)</c>.</param>
+                     /// <returns>The same builder, for chaining additional convention calls.</returns>
+                     IServicefyConventionsBuilder Decorate(Type openGenericService, Type openGenericDecorator);
                  }
 
                  /// <summary>
@@ -180,6 +234,17 @@ internal static class ServicefyConventionsBuilderTemplate
                      }
 
                      /// <inheritdoc />
+                     public IServicefyConventionsBuilder ByBaseType(
+                         Type openGenericBaseType,
+                         Lifetime lifetime,
+                         ServiceTypeSelector selector = ServiceTypeSelector.BaseType,
+                         Type matchAttribute = null)
+                     {
+                         ApplyByBaseType(openGenericBaseType, lifetime, selector, matchAttribute);
+                         return this;
+                     }
+
+                     /// <inheritdoc />
                      public IServicefyConventionsBuilder ByNamespaceOf<TMarker>(
                          Func<string, bool> predicate,
                          Lifetime lifetime,
@@ -201,6 +266,9 @@ internal static class ServicefyConventionsBuilderTemplate
 
                      /// <inheritdoc />
                      public IServicefyConventionsBuilder Decorate<TService, TDecorator>() => this;
+
+                     /// <inheritdoc />
+                     public IServicefyConventionsBuilder Decorate(Type openGenericService, Type openGenericDecorator) => this;
 
                      partial void ApplyByNamespace(Lifetime lifetime, string predicateExpression);
 

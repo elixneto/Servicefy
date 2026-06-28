@@ -25,6 +25,15 @@ public static class ServiceTypeSelectorEnum
                      ImplementedInterfaces,
 
                      /// <summary>
+                     /// Registers <c>Services.Add{Lifetime}&lt;IFoo, TImpl&gt;()</c> for every user-defined
+                     /// interface in each matched type's full interface set — including inherited and
+                     /// closed-generic interfaces (e.g. both <c>IClienteRepository</c> and the constructed
+                     /// <c>IRepository&lt;Cliente&gt;</c>). Unlike <see cref="ImplementedInterfaces"/>, which
+                     /// only registers the interfaces declared directly on the type.
+                     /// </summary>
+                     AllImplementedInterfaces,
+
+                     /// <summary>
                      /// Registers <c>Services.Add{Lifetime}&lt;TImpl&gt;()</c> — the matched type with itself
                      /// as the service type.
                      /// </summary>

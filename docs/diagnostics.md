@@ -5,7 +5,7 @@ title: Diagnostics
 # Diagnostics
 [← Back to Servicefy](./index.md)
 
-Servicefy reports compile-time diagnostics with codes `SVCFY001`–`SVCFY015` (`SVCFY004` is
+Servicefy reports compile-time diagnostics with codes `SVCFY001`–`SVCFY016` (`SVCFY004` is
 reserved/removed — see note below).
 
 | Code | Severity | Condition |
@@ -24,6 +24,7 @@ reserved/removed — see note below).
 | [SVCFY013](#svcfy013) | Error | Decorator does not implement the decorated service interface |
 | [SVCFY014](#svcfy014) | Error | `[Decorator]` applied to a class that does not implement exactly one interface |
 | [SVCFY015](#svcfy015) | Warning | Decorator declared both via `[DecoratorFor<T>]`/`[Decorator]` and `.Decorate<,>()` for the same service — duplicate dropped |
+| [SVCFY016](#svcfy016) | Error | `ByBaseType(Type, ...)` called with a non-generic `typeof(IFoo)` — the overload requires a generic type |
 
 > `SVCFY004` ("ambiguous service type") no longer exists as a separate code — classes implementing
 > multiple interfaces are registered against **all** of them instead.
@@ -241,3 +242,24 @@ overflow) the first time `IReader` is requested.
 
 Declare the decorator only one way: either with `[DecoratorFor<TService>]` / `[Decorator]`, or with
 `.Decorate<TService, TDecorator>()` — not both.
+
+## SVCFY016
+
+The [`ByBaseType(Type, ...)` overload](conventions/by-base-type.md#open-generics) was called with a
+**non-generic** `typeof(...)`. That overload exists to accept generic types — open
+(`typeof(IRepository<>)`) or closed (`typeof(IRepository<Order>)`); a non-generic type has nothing to
+scan generically. The call site is ignored.
+
+```csharp
+public interface IFoo { }
+
+// SVCFY016 — IFoo is not generic; use the generic overload instead.
+services.AddServicefyConventions()
+    .ByBaseType(typeof(IFoo), Lifetime.Scoped);
+```
+
+Use the generic form for non-generic types:
+
+```csharp
+.ByBaseType<IFoo>(Lifetime.Scoped);
+```
