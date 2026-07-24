@@ -24,7 +24,7 @@ services.AddServicefyConventions()
 | Convention | Description |
 |------------|-------------|
 | [`ByNamespace`](by-namespace.md) | Registers every type whose namespace matches a predicate, against its directly implemented interfaces. |
-| [`ByBaseType`](by-base-type.md) | Registers every type assignable to `TBase`. |
+| [`ByBaseType`](by-base-type.md) | Registers every type assignable to `TBase`. A [`typeof(IFoo<>)` overload](by-base-type.md#open-generics) supports open generics. |
 | [`ByNamespaceOf`](by-namespace-of.md) | Like `ByNamespace`, but restricted to the namespace (or sub-namespaces) of a marker type `TMarker`. |
 | [`ByTypeName`](by-type-name.md) | Registers every type whose namespace **and** type name match a two-parameter predicate. |
 
@@ -47,7 +47,9 @@ the same project.
 [`[DecoratorFor<T>]`](../byconfiguration/decorator-for.md) and `.Decorate<,>()` work the same way for
 both conventions: if a matched type's interface has decorators, the full decorator chain is emitted
 instead of a plain registration call. Classes used as `[DecoratorFor<T>]` / `.Decorate<,>()` targets
-are excluded from matching.
+are excluded from matching. `ByBaseType` also supports
+[open-generic decorators](by-base-type.md#open-generic-decorators) via
+`.Decorate(typeof(IFoo<>), typeof(Decorator<>))` for closed forms known at compile time.
 
 ## Entry point
 
@@ -62,6 +64,13 @@ internal interface IServicefyConventionsBuilder
         [CallerArgumentExpression(nameof(predicate))] string predicateExpression = "");
 
     IServicefyConventionsBuilder ByBaseType<TBase>(
+        Lifetime lifetime,
+        ServiceTypeSelector selector = ServiceTypeSelector.BaseType,
+        Type matchAttribute = null);
+
+    // Open-generic overload — see ByBaseType > Open generics
+    IServicefyConventionsBuilder ByBaseType(
+        Type openGenericBaseType,
         Lifetime lifetime,
         ServiceTypeSelector selector = ServiceTypeSelector.BaseType,
         Type matchAttribute = null);
