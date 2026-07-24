@@ -57,6 +57,12 @@ internal static class ConventionFilters
         foreach (var (_, decorator, _) in Decorators.Analysis.DecorateCallCollector.Collect(compilation))
             decoratorTypes.Add(decorator);
 
+        // Open-generic decorators (.Decorate(typeof(IFoo<>), typeof(Decorator<>))) must likewise be
+        // excluded from convention matching, otherwise the decorator would be registered as a plain
+        // open-generic implementation of the service it decorates.
+        foreach (var (_, decorator, _) in Decorators.Analysis.DecorateCallCollector.CollectOpenGeneric(compilation))
+            decoratorTypes.Add(decorator);
+
         return decoratorTypes;
     }
 

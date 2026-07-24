@@ -69,6 +69,7 @@ internal static class ByBaseTypeRegistrationEmitter
         // SVCFY007 diagnostics when multiple rules target overlapping interfaces).
         var ruleMatches = new List<(ByBaseTypeConventionRule Rule, List<INamedTypeSymbol> MatchedTypes, List<INamedTypeSymbol> OpenTypes)>();
         var registeredServices = new HashSet<string>(StringComparer.Ordinal);
+        var closedServiceSymbols = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
 
         foreach (var rule in distinctRules)
         {
@@ -91,8 +92,11 @@ internal static class ByBaseTypeRegistrationEmitter
 
             ruleMatches.Add((rule, matchedTypes, matchedOpenTypes));
 
-            foreach (var serviceFqn in GetTargetServiceFqns(matchedTypes, rule, projectReferenceAssemblies))
-                registeredServices.Add(serviceFqn);
+            foreach (var service in GetTargetServiceSymbols(matchedTypes, rule, projectReferenceAssemblies))
+            {
+                registeredServices.Add(service.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                closedServiceSymbols.Add(service);
+            }
 
             foreach (var impl in matchedOpenTypes)
             foreach (var service in GetOpenServiceForms(impl, rule, projectReferenceAssemblies))
@@ -102,6 +106,13 @@ internal static class ByBaseTypeRegistrationEmitter
         if (ruleMatches.Count == 0) return;
 
         var decoratorEntries = DecoratorCollector.CollectDecoratorEntries(compilation);
+
+        // Expand open-generic .Decorate(typeof(IFoo<>), typeof(Decorator<>)) chains into closed
+        // decorator entries for each closed service registered above (e.g. IRepository<Cliente> ->
+        // LoggingRepository<Cliente>). Closed forms only — runtime-closed types reached through the
+        // open passthrough cannot be decorated AOT-safely.
+        SynthesizeOpenGenericDecoratorEntries(compilation, closedServiceSymbols, decoratorEntries);
+
         var validDecoratorMap = DecoratorEmitter.ValidateAndBuildDecoratorMap(spc, decoratorEntries, registeredServices);
 
         var ns = compilation.AssemblyName ?? "Servicefy";
@@ -362,7 +373,54 @@ internal static class ByBaseTypeRegistrationEmitter
         }
     }
 
-    private static IEnumerable<string> GetTargetServiceFqns(
+    private static void SynthesizeOpenGenericDecoratorEntries(
+        Compilation compilation,
+        HashSet<INamedTypeSymbol> closedServiceSymbols,
+        List<InterfaceDecoratorEntry> decoratorEntries)
+    {
+        var openChains = DecoratorCollector.CollectOpenGenericChains(compilation);
+        if (openChains.Count == 0) return;
+
+        // An explicit closed .Decorate<IRepository<Cliente>, X>() takes precedence over the expanded
+        // open-generic chain for the same closed service.
+        var existingFqns = decoratorEntries
+            .Select(e => e.InterfaceFqn)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var (unboundService, unboundDecorators, location) in openChains)
+        foreach (var closed in closedServiceSymbols)
+        {
+            if (!closed.IsGenericType || closed.IsUnboundGenericType) continue;
+            if (!SymbolEqualityComparer.Default.Equals(closed.OriginalDefinition, unboundService)) continue;
+
+            var fqn = closed.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (!existingFqns.Add(fqn)) continue;
+
+            var typeArgs = closed.TypeArguments;
+            var closedDecorators = new List<INamedTypeSymbol>();
+            var valid = true;
+            foreach (var decorator in unboundDecorators)
+            {
+                // The decorator must close over the same type arguments as the service
+                // (Decorator<T> : IFoo<T>); a differing arity can't be constructed positionally.
+                if (decorator.Arity != typeArgs.Length)
+                {
+                    valid = false;
+                    break;
+                }
+
+                closedDecorators.Add(decorator.Construct(typeArgs.ToArray()));
+            }
+
+            if (valid && closedDecorators.Count > 0)
+                decoratorEntries.Add(DecoratorCollector.CreateEntry(compilation, closed, closedDecorators, location));
+        }
+    }
+
+    // The closed service type symbols a rule registers its concrete (closed) matched types against.
+    // Used for decorator wiring and to seed the registered-service set (the open-generic passthrough
+    // services are unbound and contributed separately).
+    private static IEnumerable<INamedTypeSymbol> GetTargetServiceSymbols(
         List<INamedTypeSymbol> matchedTypes, ByBaseTypeConventionRule rule, HashSet<IAssemblySymbol> projectReferenceAssemblies)
     {
         switch (rule.Selector)
@@ -372,11 +430,11 @@ internal static class ByBaseTypeRegistrationEmitter
                 {
                     foreach (var type in matchedTypes)
                     foreach (var constructed in GetConstructedForms(type, rule.BaseType))
-                        yield return constructed.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        yield return constructed;
                 }
                 else
                 {
-                    yield return rule.BaseTypeFqn;
+                    yield return rule.BaseType;
                 }
 
                 break;
@@ -384,14 +442,14 @@ internal static class ByBaseTypeRegistrationEmitter
             case "ImplementedInterfaces":
                 foreach (var type in matchedTypes)
                 foreach (var iface in ConventionFilters.GetRegistrableInterfaces(type, projectReferenceAssemblies))
-                    yield return iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    yield return iface;
 
                 break;
 
             case "AllImplementedInterfaces":
                 foreach (var type in matchedTypes)
                 foreach (var iface in ConventionFilters.GetAllRegistrableInterfaces(type, projectReferenceAssemblies))
-                    yield return iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    yield return iface;
 
                 break;
         }

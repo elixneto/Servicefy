@@ -718,6 +718,88 @@ public class ByBaseTypeGenerationTests
         Assert.DoesNotContain("IClienteRepository", generatedSource);
     }
 
+    private const string OpenGenericDecoratorSource = """
+        using Microsoft.Extensions.DependencyInjection;
+
+        namespace TestAssembly
+        {
+            public interface IRepository<T> { }
+            public class Cliente { }
+            public class ClienteRepository : IRepository<Cliente> { }
+
+            public class LoggingRepository<T> : IRepository<T>
+            {
+                public IRepository<T> Inner { get; }
+                public LoggingRepository(IRepository<T> inner) { Inner = inner; }
+            }
+        }
+        """;
+
+    [Fact]
+    public void ByBaseType_OpenGeneric_Decorate_WrapsClosedFormAtCompileTime()
+    {
+        var source = OpenGenericDecoratorSource + """
+
+            namespace TestAssembly
+            {
+                public class Startup
+                {
+                    public void Configure(IServiceCollection services)
+                    {
+                        services.AddServicefyConventions()
+                            .ByBaseType(typeof(IRepository<>), Lifetime.Scoped)
+                            .Decorate(typeof(IRepository<>), typeof(LoggingRepository<>));
+                    }
+                }
+            }
+            """;
+
+        var (output, diagnostics) = CompilationHelper.RunGenerator(source);
+
+        Assert.Empty(diagnostics);
+        var generatedSource = output.SyntaxTrees
+            .FirstOrDefault(t => t.FilePath.EndsWith("ServicefyConventionsBuilder.ByBaseType.g.cs"))
+            ?.ToString();
+
+        Assert.NotNull(generatedSource);
+        // The closed IRepository<Cliente> is wrapped by the constructed LoggingRepository<Cliente>.
+        Assert.Contains("AddKeyedScoped<global::TestAssembly.IRepository<global::TestAssembly.Cliente>, global::TestAssembly.ClienteRepository>(\"__BASE__\");", generatedSource);
+        Assert.Contains("new global::TestAssembly.LoggingRepository<global::TestAssembly.Cliente>(", generatedSource);
+        // The decorator itself is not registered as a plain open implementation of IRepository<>.
+        Assert.DoesNotContain("typeof(global::TestAssembly.LoggingRepository<>)", generatedSource);
+    }
+
+    [Fact]
+    public void ByBaseType_OpenGeneric_Decorate_ResolvesDecoratedInstanceAtRuntime()
+    {
+        var source = OpenGenericDecoratorSource + """
+
+            namespace TestAssembly
+            {
+                public static class Acceptance
+                {
+                    public static string Resolve()
+                    {
+                        var services = new ServiceCollection();
+                        services.AddServicefyConventions()
+                            .ByBaseType(typeof(IRepository<>), Lifetime.Scoped)
+                            .Decorate(typeof(IRepository<>), typeof(LoggingRepository<>));
+
+                        var provider = services.BuildServiceProvider();
+                        var repo = provider.GetRequiredService<IRepository<Cliente>>();
+                        var inner = ((LoggingRepository<Cliente>)repo).Inner;
+                        return repo.GetType().Name + "|" + inner.GetType().Name;
+                    }
+                }
+            }
+            """;
+
+        var result = Assert.IsType<string>(RuntimeCompilationHelper.RunStaticMethod(source, "TestAssembly.Acceptance", "Resolve"));
+
+        // LoggingRepository<Cliente> wraps the base ClienteRepository.
+        Assert.Equal("LoggingRepository`1|ClienteRepository", result);
+    }
+
     [Fact]
     public void ByBaseType_ClosedTypeof_IsEquivalentToGenericForm()
     {

@@ -176,6 +176,25 @@ internal static class ServicefyConventionsBuilderTemplate
                      /// </summary>
                      /// <returns>The same builder, for chaining additional convention calls.</returns>
                      IServicefyConventionsBuilder Decorate<TService, TDecorator>();
+
+                     /// <summary>
+                     /// Open-generic counterpart of <see cref="Decorate{TService,TDecorator}"/>: adds
+                     /// <paramref name="openGenericDecorator"/> (e.g. <c>typeof(LoggingRepository&lt;&gt;)</c>)
+                     /// as an outer decorator layer for every <b>closed</b> form of
+                     /// <paramref name="openGenericService"/> (e.g. <c>typeof(IRepository&lt;&gt;)</c>) that a
+                     /// convention registers against a concrete type known at compile time — so
+                     /// <c>IRepository&lt;Cliente&gt;</c> is wrapped by <c>LoggingRepository&lt;Cliente&gt;</c>.
+                     /// </summary>
+                     /// <remarks>
+                     /// Only closed forms present in the compilation are decorated; a type closed solely at
+                     /// runtime (resolved through the open-generic passthrough <c>Add(typeof(IRepository&lt;&gt;),
+                     /// typeof(Repository&lt;&gt;))</c>) is <b>not</b> decorated, because decorating an open
+                     /// generic at runtime would require reflection and is not AOT-safe.
+                     /// </remarks>
+                     /// <param name="openGenericService">The unbound service, e.g. <c>typeof(IRepository&lt;&gt;)</c>.</param>
+                     /// <param name="openGenericDecorator">The unbound decorator, e.g. <c>typeof(LoggingRepository&lt;&gt;)</c>.</param>
+                     /// <returns>The same builder, for chaining additional convention calls.</returns>
+                     IServicefyConventionsBuilder Decorate(Type openGenericService, Type openGenericDecorator);
                  }
 
                  /// <summary>
@@ -247,6 +266,9 @@ internal static class ServicefyConventionsBuilderTemplate
 
                      /// <inheritdoc />
                      public IServicefyConventionsBuilder Decorate<TService, TDecorator>() => this;
+
+                     /// <inheritdoc />
+                     public IServicefyConventionsBuilder Decorate(Type openGenericService, Type openGenericDecorator) => this;
 
                      partial void ApplyByNamespace(Lifetime lifetime, string predicateExpression);
 
