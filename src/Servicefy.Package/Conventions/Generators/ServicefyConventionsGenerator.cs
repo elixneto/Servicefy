@@ -39,7 +39,7 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
         {
             foreach (var (_, diagnostic) in results)
                 if (diagnostic is not null)
-                    spc.ReportDiagnostic(diagnostic);
+                    spc.ReportDiagnostic(diagnostic.ToDiagnostic());
         });
 
         var byNamespaceRules = byNamespaceResults
@@ -65,7 +65,7 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
         {
             foreach (var (_, diagnostic) in results)
                 if (diagnostic is not null)
-                    spc.ReportDiagnostic(diagnostic);
+                    spc.ReportDiagnostic(diagnostic.ToDiagnostic());
         });
 
         var byBaseTypeRules = byBaseTypeResults
@@ -91,7 +91,7 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
         {
             foreach (var (_, diagnostic) in results)
                 if (diagnostic is not null)
-                    spc.ReportDiagnostic(diagnostic);
+                    spc.ReportDiagnostic(diagnostic.ToDiagnostic());
         });
 
         var byNamespaceOfRules = byNamespaceOfResults
@@ -117,7 +117,7 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
         {
             foreach (var (_, diagnostic) in results)
                 if (diagnostic is not null)
-                    spc.ReportDiagnostic(diagnostic);
+                    spc.ReportDiagnostic(diagnostic.ToDiagnostic());
         });
 
         var byTypeNameRules = byTypeNameResults

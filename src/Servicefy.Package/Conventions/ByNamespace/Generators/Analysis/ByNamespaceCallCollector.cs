@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Servicefy.Package.Conventions.Generators.Analysis;
 using Servicefy.Package.Conventions.Models;
+using Servicefy.Package.Pipeline;
 
 namespace Servicefy.Package.Conventions.ByNamespace.Generators.Analysis;
 
@@ -18,18 +19,18 @@ internal static class ByNamespaceCallCollector
             ArgumentList.Arguments.Count: 2
         };
 
-    internal static (NamespaceConventionRule? Rule, Diagnostic? Diagnostic) Transform(GeneratorSyntaxContext context)
+    internal static (NamespaceConventionRule? Rule, DiagnosticInfo? Diagnostic) Transform(GeneratorSyntaxContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
         var arguments = invocation.ArgumentList.Arguments;
 
         if (!NamespacePredicateParser.TryParse(arguments[0].Expression, out var predicate, out var diagnostic) || predicate is null)
-            return (null, diagnostic);
+            return (null, diagnostic is null ? null : DiagnosticInfo.From(diagnostic));
 
         if (!TryGetLifetime(arguments[1].Expression, out var lifetime))
             return (null, null);
 
-        return (new NamespaceConventionRule(arguments[0].Expression.ToString(), lifetime, predicate), null);
+        return (new NamespaceConventionRule(arguments[0].Expression.ToString(), lifetime), null);
     }
 
     private static bool TryGetLifetime(ExpressionSyntax expr, out string lifetime)

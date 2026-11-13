@@ -23,6 +23,13 @@ namespace Servicefy.Package.Conventions.ByTypeName.Generators.Analysis;
 /// </remarks>
 internal static class TypeNamePredicateParser
 {
+    /// <summary>
+    /// Re-parses a predicate from its source text (as kept in a value-equatable rule model).
+    /// Diagnostics were already reported when the call site was collected, so they are dropped here.
+    /// </summary>
+    internal static bool TryParseText(string predicateExpression, out Func<string, string, bool>? predicate) =>
+        TryParse(SyntaxFactory.ParseExpression(predicateExpression), out predicate, out _) && predicate is not null;
+
     internal static bool TryParse(ExpressionSyntax argumentExpression, out Func<string, string, bool>? predicate, out Diagnostic? diagnostic)
     {
         predicate = null;
