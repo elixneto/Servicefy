@@ -9,7 +9,7 @@ namespace Servicefy.Tests.Helpers;
 
 internal static class CompilationHelper
 {
-    private static readonly IEnumerable<MetadataReference> BaseReferences =
+    internal static readonly IEnumerable<MetadataReference> BaseReferences =
     [
         MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
         MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location),
