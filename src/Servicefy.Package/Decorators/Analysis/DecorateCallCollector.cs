@@ -79,8 +79,8 @@ internal static class DecorateCallCollector
         {
             if (call.IsOpenGeneric != openGeneric) continue;
 
-            var service = TypeReference.Resolve(compilation, call.ServiceId);
-            var decorator = TypeReference.Resolve(compilation, call.DecoratorId);
+            var service = ResolveType(compilation, call.ServiceId);
+            var decorator = ResolveType(compilation, call.DecoratorId);
             if (service is null || decorator is null) continue;
 
             results.Add((service, decorator, call.Location));
@@ -91,12 +91,29 @@ internal static class DecorateCallCollector
 
     private static DecorateCall? Create(INamedTypeSymbol service, INamedTypeSymbol decorator, bool isOpenGeneric, Location location)
     {
-        var serviceId = TypeReference.CreateId(service);
-        var decoratorId = TypeReference.CreateId(decorator);
+        var serviceId = CreateTypeId(service);
+        var decoratorId = CreateTypeId(decorator);
         return serviceId is null || decoratorId is null
             ? null
             : new DecorateCall(serviceId, decoratorId, isOpenGeneric, location);
     }
+
+    // A type argument that does not bind (a typo while typing, or a type another generator has not
+    // produced yet) is still an error type the call site refers to: the decorator must stay excluded
+    // from convention registration, and an unresolved decorator must still fail validation (SVCFY013)
+    // at the call. Such types can't get a documentation id, so they are kept by name and recreated as
+    // error types when resolved.
+    private const string ErrorTypePrefix = "!error:";
+
+    private static string? CreateTypeId(INamedTypeSymbol type) =>
+        type.TypeKind == TypeKind.Error
+            ? ErrorTypePrefix + type.ToDisplayString()
+            : TypeReference.CreateId(type);
+
+    private static INamedTypeSymbol? ResolveType(Compilation compilation, string id) =>
+        id.StartsWith(ErrorTypePrefix, StringComparison.Ordinal)
+            ? compilation.CreateErrorTypeSymbol(container: null, id.Substring(ErrorTypePrefix.Length), arity: 0)
+            : TypeReference.Resolve(compilation, id);
 
     // .Decorate<TService, TDecorator>()
     private static bool IsClosedCandidate(InvocationExpressionSyntax invocation, out GenericNameSyntax? generic)

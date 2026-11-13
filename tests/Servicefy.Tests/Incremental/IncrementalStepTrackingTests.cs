@@ -21,11 +21,13 @@ public class IncrementalStepTrackingTests
         TrackingNames.ByConfigurationAnnotatedClasses,
         TrackingNames.ByConfigurationDiagnosticsInput,
         TrackingNames.ByConfigurationRegistrationsInput,
+        TrackingNames.ByConfigurationDecorateCalls,
     ];
 
     private static readonly string[] ConventionsTrackingNames =
     [
         TrackingNames.ConventionsBuilderInput,
+        TrackingNames.ConventionsDecorateCalls, TrackingNames.ConventionsTypePool,
         TrackingNames.ByNamespaceResults, TrackingNames.ByNamespaceRules, TrackingNames.ByNamespaceEmitInput,
         TrackingNames.ByBaseTypeResults, TrackingNames.ByBaseTypeRules, TrackingNames.ByBaseTypeEmitInput,
         TrackingNames.ByNamespaceOfResults, TrackingNames.ByNamespaceOfRules, TrackingNames.ByNamespaceOfEmitInput,
@@ -62,15 +64,39 @@ public class IncrementalStepTrackingTests
                  && s.SourceText.ToString().Contains("global::TestAssembly.Services.Greeter"));
     }
 
+    private static readonly string[] DecorateCallTrackingNames =
+    [
+        TrackingNames.ByConfigurationDecorateCalls,
+        TrackingNames.ConventionsDecorateCalls,
+    ];
+
     [Fact]
     public void InitialRun_EveryNamedStep_IsTrackedAndNew()
     {
         var run = IncrementalGeneratorHelper.RunWithEdit(IncrementalTestProject.Sources, CompilationEdits.None);
 
+        foreach (var name in ByConfigurationTrackingNames.Except(DecorateCallTrackingNames))
+            AssertAllReasons(IncrementalStepRunReason.New, run.InitialReasons<ServicefyByConfigurationGenerator>(name), name);
+
+        foreach (var name in ConventionsTrackingNames.Except(DecorateCallTrackingNames))
+            AssertAllReasons(IncrementalStepRunReason.New, run.InitialReasons<ServicefyConventionsGenerator>(name), name);
+    }
+
+    [Fact]
+    public void InitialRun_ProjectWithDecorators_EveryNamedStepIsTrackedAndNew()
+    {
+        var run = IncrementalGeneratorHelper.RunWithEdit(DecoratorTestProject.Sources, CompilationEdits.None);
+
+        string[] noCallSites =
+        [
+            TrackingNames.ByNamespaceOfResults, TrackingNames.ByNamespaceOfRules,
+            TrackingNames.ByTypeNameResults, TrackingNames.ByTypeNameRules,
+        ];
+
         foreach (var name in ByConfigurationTrackingNames)
             AssertAllReasons(IncrementalStepRunReason.New, run.InitialReasons<ServicefyByConfigurationGenerator>(name), name);
 
-        foreach (var name in ConventionsTrackingNames)
+        foreach (var name in ConventionsTrackingNames.Except(noCallSites))
             AssertAllReasons(IncrementalStepRunReason.New, run.InitialReasons<ServicefyConventionsGenerator>(name), name);
     }
 
