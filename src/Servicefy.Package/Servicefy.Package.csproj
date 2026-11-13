@@ -27,6 +27,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Lets tests assert on pipeline steps by their TrackingNames constants -->
+        <InternalsVisibleTo Include="Servicefy.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
         <Content Include="..\..\README.md" Link="README.md" Pack="true" PackagePath="/" />
         
         <!-- Roslyn analyzers only need one TFM in the package; net8.0 is used here -->
