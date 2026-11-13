@@ -20,7 +20,7 @@ internal static class ByBaseTypeRegistrationEmitter
 {
     internal static void Emit(
         SourceProductionContext spc,
-        (Compilation Compilation, ImmutableArray<ByBaseTypeConventionRule> Rules) source)
+        (Compilation Compilation, EquatableArray<ByBaseTypeConventionRule> Rules) source)
     {
         var (compilation, rules) = source;
 

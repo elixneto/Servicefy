@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Servicefy.Package.Conventions.Generators.Emit;
 using Servicefy.Package.Conventions.Models;
+using Servicefy.Package.Pipeline;
 using Servicefy.Package.Conventions.ByNamespace.Generators.Analysis;
 using Servicefy.Package.Decorators;
 
@@ -20,7 +21,7 @@ internal static class ByNamespaceOfRegistrationEmitter
 {
     internal static void Emit(
         SourceProductionContext spc,
-        (Compilation Compilation, ImmutableArray<NamespaceOfConventionRule> Rules) source)
+        (Compilation Compilation, EquatableArray<NamespaceOfConventionRule> Rules) source)
     {
         var (compilation, rules) = source;
 

@@ -7,6 +7,7 @@ using Servicefy.Package.Conventions.ByNamespaceOf.Generators.Analysis;
 using Servicefy.Package.Conventions.ByNamespaceOf.Generators.Emit;
 using Servicefy.Package.Conventions.ByTypeName.Generators.Analysis;
 using Servicefy.Package.Conventions.ByTypeName.Generators.Emit;
+using Servicefy.Package.Pipeline;
 
 namespace Servicefy.Package.Conventions.Generators;
 
@@ -50,7 +51,7 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
         // 3. Implement ServicefyConventionsBuilder.ApplyByNamespace for each rule
         context.RegisterSourceOutput(
             context.CompilationProvider
-                .Combine(byNamespaceRules.Collect())
+                .Combine(byNamespaceRules.Collect().Select(static (rules, _) => rules.ToEquatableArray()))
                 .WithTrackingName(TrackingNames.ByNamespaceEmitInput),
             ByNamespaceRegistrationEmitter.Emit);
 
@@ -76,7 +77,7 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
         // 5. Implement ServicefyConventionsBuilder.ApplyByBaseType for each rule
         context.RegisterSourceOutput(
             context.CompilationProvider
-                .Combine(byBaseTypeRules.Collect())
+                .Combine(byBaseTypeRules.Collect().Select(static (rules, _) => rules.ToEquatableArray()))
                 .WithTrackingName(TrackingNames.ByBaseTypeEmitInput),
             ByBaseTypeRegistrationEmitter.Emit);
 
@@ -102,7 +103,7 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
         // 7. Implement ServicefyConventionsBuilder.ApplyByNamespaceOf for each rule
         context.RegisterSourceOutput(
             context.CompilationProvider
-                .Combine(byNamespaceOfRules.Collect())
+                .Combine(byNamespaceOfRules.Collect().Select(static (rules, _) => rules.ToEquatableArray()))
                 .WithTrackingName(TrackingNames.ByNamespaceOfEmitInput),
             ByNamespaceOfRegistrationEmitter.Emit);
 
@@ -128,7 +129,7 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
         // 9. Implement ServicefyConventionsBuilder.ApplyByTypeName for each rule
         context.RegisterSourceOutput(
             context.CompilationProvider
-                .Combine(byTypeNameRules.Collect())
+                .Combine(byTypeNameRules.Collect().Select(static (rules, _) => rules.ToEquatableArray()))
                 .WithTrackingName(TrackingNames.ByTypeNameEmitInput),
             ByTypeNameRegistrationEmitter.Emit);
     }

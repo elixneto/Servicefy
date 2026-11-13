@@ -8,9 +8,11 @@ namespace Servicefy.Package.Conventions.Models;
 /// the data needed to match candidate types and dispatch to it at runtime.
 /// </summary>
 /// <remarks>
-/// Value-equatable on purpose (no symbols, syntax or locations): the incremental pipeline can
-/// then tell an unchanged call site apart from a changed one and skip downstream work. Types are
-/// kept as <see cref="TypeReference"/> ids and resolved against the compilation at emit time.
+/// Value-equatable on purpose (no symbols, syntax or <c>Location</c>s): the incremental pipeline
+/// can then tell an unchanged call site apart from a changed one and skip downstream work. Types
+/// are kept as <see cref="TypeReference"/> ids and resolved against the compilation at emit time;
+/// the type argument's position is kept as a <see cref="LocationInfo"/> (path + span) for SVCFY010,
+/// so moving the call site within its file is (correctly) seen as a change.
 /// </remarks>
 /// <param name="BaseTypeId">
 /// <see cref="TypeReference"/> id of <c>TBase</c> (for the open-generic overload, of its definition).
