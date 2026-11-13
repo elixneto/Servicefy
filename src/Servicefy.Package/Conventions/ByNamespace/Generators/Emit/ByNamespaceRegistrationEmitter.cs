@@ -12,9 +12,10 @@ namespace Servicefy.Package.Conventions.ByNamespace.Generators.Emit;
 
 /// <summary>
 /// Implements <c>ServicefyConventionsBuilder.ApplyByNamespace</c> for every distinct
-/// <c>.ByNamespace(predicate, lifetime)</c> call site found in the compilation:
+/// <c>.ByNamespace(predicate, lifetime[, scope])</c> call site found in the compilation:
 /// matches namespaces against the predicate, then registers each directly implemented
-/// interface of every matching class with the requested lifetime.
+/// interface of every matching class with the requested lifetime. Under
+/// <c>ConventionScope.AllReferences</c> candidates also come from referenced NuGet packages.
 /// </summary>
 internal static class ByNamespaceRegistrationEmitter
 {
@@ -26,7 +27,7 @@ internal static class ByNamespaceRegistrationEmitter
         var compilation = pool.Compilation;
 
         var distinctRules = rules
-            .DistinctBy(r => (r.PredicateExpression, r.Lifetime))
+            .DistinctBy(r => (r.PredicateExpression, r.Lifetime, r.Scope))
             .ToList();
 
         // Rules carry the predicate as text (value-equatable pipeline model); turn each back into
@@ -54,23 +55,25 @@ internal static class ByNamespaceRegistrationEmitter
         // First pass: compute matched types per rule and union all matched interfaces so
         // decorator validation runs once across the whole compilation (avoids duplicate
         // SVCFY007 diagnostics when multiple rules match overlapping interfaces).
-        var ruleMatches = new List<(NamespaceConventionRule Rule, List<INamedTypeSymbol> MatchedTypes)>();
+        var ruleMatches = new List<(NamespaceConventionRule Rule, List<INamedTypeSymbol> MatchedTypes, HashSet<IAssemblySymbol> RegistrableAssemblies)>();
         var registeredServices = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var rule in distinctRules)
         {
-            var matchedTypes = namespaceGroups
-                .Where(g => EvaluatePredicate(predicates[rule], g.Key))
-                .SelectMany(g => g)
+            var (matchedTypes, registrableAssemblies) = rule.Scope == ConventionScopes.AllReferences
+                ? (MatchAllReferences(pool, rule, predicates[rule]), pool.AllReferencesRegistrableAssemblies)
+                : (namespaceGroups.Where(g => EvaluatePredicate(predicates[rule], g.Key)).SelectMany(g => g), projectReferenceAssemblies);
+
+            var ordered = matchedTypes
                 .OrderBy(t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
                 .ToList();
 
-            if (matchedTypes.Count == 0) continue;
+            if (ordered.Count == 0) continue;
 
-            ruleMatches.Add((rule, matchedTypes));
+            ruleMatches.Add((rule, ordered, registrableAssemblies));
 
-            foreach (var type in matchedTypes)
-            foreach (var iface in ConventionFilters.GetRegistrableInterfaces(type, projectReferenceAssemblies))
+            foreach (var type in ordered)
+            foreach (var iface in ConventionFilters.GetRegistrableInterfaces(type, registrableAssemblies))
                 registeredServices.Add(iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
         }
 
@@ -88,18 +91,18 @@ internal static class ByNamespaceRegistrationEmitter
         sb.AppendLine("{");
         sb.AppendLine("    internal sealed partial class ServicefyConventionsBuilder");
         sb.AppendLine("    {");
-        sb.AppendLine("        partial void ApplyByNamespace(Lifetime lifetime, string predicateExpression)");
+        sb.AppendLine("        partial void ApplyByNamespace(Lifetime lifetime, ConventionScope scope, string predicateExpression)");
         sb.AppendLine("        {");
 
-        foreach (var (rule, matchedTypes) in ruleMatches)
+        foreach (var (rule, matchedTypes, registrableAssemblies) in ruleMatches)
         {
-            sb.AppendLine($"            if (lifetime == Lifetime.{rule.Lifetime} && predicateExpression == \"{ConventionFilters.EscapeStringLiteral(rule.PredicateExpression)}\")");
+            sb.AppendLine($"            if (lifetime == Lifetime.{rule.Lifetime} && scope == ConventionScope.{rule.Scope} && predicateExpression == \"{ConventionFilters.EscapeStringLiteral(rule.PredicateExpression)}\")");
             sb.AppendLine("            {");
 
             foreach (var type in matchedTypes)
             {
                 var implFqn = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                foreach (var iface in ConventionFilters.GetRegistrableInterfaces(type, projectReferenceAssemblies))
+                foreach (var iface in ConventionFilters.GetRegistrableInterfaces(type, registrableAssemblies))
                 {
                     var serviceFqn = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     if (validDecoratorMap.TryGetValue(serviceFqn, out var decoratorEntry))
@@ -119,6 +122,30 @@ internal static class ByNamespaceRegistrationEmitter
         sb.AppendLine("}");
 
         spc.AddSource("ServicefyConventionsBuilder.ByNamespace.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+    }
+
+    // ConventionScope.AllReferences (issue #9): candidates also come from every referenced NuGet package,
+    // and package interfaces are registrable. A StartsWith-bounded predicate prunes the package walk to
+    // the namespaces it can match; otherwise every package is walked (cached per assembly). The predicate
+    // runs once per namespace before any per-type check, so non-matching package types are never inspected.
+    private static IEnumerable<INamedTypeSymbol> MatchAllReferences(
+        ConventionTypePool pool, NamespaceConventionRule rule, Func<string, bool> predicate)
+    {
+        var types = NamespacePredicateParser.TryGetRequiredPrefixes(rule.PredicateExpression, out var prefixes, out var comparison)
+            ? pool.GetAllReferencesTypes(prefixes, comparison)
+            : pool.GetAllReferencesTypes(null, StringComparison.Ordinal);
+
+        var matched = types
+            .GroupBy(t => t.ContainingNamespace, SymbolEqualityComparer.Default)
+            .Where(g => EvaluatePredicate(predicate, g.Key!.ToDisplayString()))
+            .SelectMany(g => g)
+            .Where(t => IsRegistrable(t, pool.DecoratorTypes, pool.AllReferencesRegistrableAssemblies))
+            .ToList();
+
+        // Decorators declared in packages are not in the pool's decorator set (packages are not scanned
+        // for it); exclude the matched ones here.
+        var packageDecorators = ConventionFilters.CollectDecoratorTypes(matched.Where(pool.IsPackageType), pool.Compilation, []);
+        return matched.Where(t => !packageDecorators.Contains(t));
     }
 
     private static bool IsRegistrable(INamedTypeSymbol type, HashSet<INamedTypeSymbol> decoratorTypes, HashSet<IAssemblySymbol> projectReferenceAssemblies) =>

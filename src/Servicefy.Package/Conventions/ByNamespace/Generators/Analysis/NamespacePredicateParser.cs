@@ -29,6 +29,110 @@ internal static class NamespacePredicateParser
     internal static Func<string, bool>? ParseText(string predicateExpression) =>
         TryParse(SyntaxFactory.ParseExpression(predicateExpression), out var predicate, out _) ? predicate : null;
 
+    /// <summary>
+    /// Namespace prefixes every namespace matched by the predicate is guaranteed to start with, when
+    /// that can be read off its shape: <c>StartsWith</c> with literals (any of its forms), <c>==</c> /
+    /// <c>Equals</c> with a literal, <c>&amp;&amp;</c> (either side), <c>||</c> (both sides, same
+    /// comparison) and parentheses. Used to prune which namespaces of a referenced assembly are walked
+    /// at all under <c>ConventionScope.AllReferences</c>. False when no such guarantee exists
+    /// (<c>EndsWith</c>, <c>Contains</c>, <c>!</c>, <c>_ =&gt; true</c>, ...).
+    /// </summary>
+    internal static bool TryGetRequiredPrefixes(
+        string predicateExpression, out IReadOnlyList<string> prefixes, out StringComparison comparison)
+    {
+        prefixes = [];
+        comparison = StringComparison.Ordinal;
+
+        (string? parameterName, ExpressionSyntax? body) = SyntaxFactory.ParseExpression(predicateExpression) switch
+        {
+            SimpleLambdaExpressionSyntax simple => (simple.Parameter.Identifier.ValueText, simple.ExpressionBody),
+            ParenthesizedLambdaExpressionSyntax { ParameterList.Parameters.Count: 1 } paren =>
+                (paren.ParameterList.Parameters[0].Identifier.ValueText, paren.ExpressionBody),
+            _ => (null, null)
+        };
+
+        if (parameterName is null || body is null) return false;
+
+        var result = GetRequiredPrefixes(body, parameterName);
+        if (result is null) return false;
+
+        (prefixes, comparison) = result.Value;
+        return true;
+    }
+
+    private static (IReadOnlyList<string> Prefixes, StringComparison Comparison)? GetRequiredPrefixes(ExpressionSyntax expr, string parameterName)
+    {
+        switch (expr)
+        {
+            case ParenthesizedExpressionSyntax paren:
+                return GetRequiredPrefixes(paren.Expression, parameterName);
+
+            // Both sides must hold, so either side's prefixes are a valid bound.
+            case BinaryExpressionSyntax bin when bin.IsKind(SyntaxKind.LogicalAndExpression):
+                return GetRequiredPrefixes(bin.Left, parameterName) ?? GetRequiredPrefixes(bin.Right, parameterName);
+
+            // Either side may hold, so both must be bounded (and comparable).
+            case BinaryExpressionSyntax bin when bin.IsKind(SyntaxKind.LogicalOrExpression):
+                var left = GetRequiredPrefixes(bin.Left, parameterName);
+                var right = GetRequiredPrefixes(bin.Right, parameterName);
+                return left is not null && right is not null && left.Value.Comparison == right.Value.Comparison
+                    ? ([.. left.Value.Prefixes, .. right.Value.Prefixes], left.Value.Comparison)
+                    : null;
+
+            case BinaryExpressionSyntax bin when bin.IsKind(SyntaxKind.EqualsExpression):
+                return TryGetParameterAndLiteral(bin.Left, bin.Right, parameterName, out var equalTo)
+                    ? ([equalTo], StringComparison.Ordinal)
+                    : null;
+
+            case InvocationExpressionSyntax
+            {
+                Expression: MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax id } mae
+            } invocation when id.Identifier.ValueText == parameterName:
+                return GetMethodPrefixes(mae.Name.Identifier.ValueText, invocation.ArgumentList.Arguments);
+
+            default:
+                return null;
+        }
+    }
+
+    private static (IReadOnlyList<string> Prefixes, StringComparison Comparison)? GetMethodPrefixes(
+        string methodName, SeparatedSyntaxList<ArgumentSyntax> arguments)
+    {
+        if (methodName is not ("StartsWith" or "Equals") || arguments.Count == 0) return null;
+
+        var expressions = arguments.Select(a => a.Expression).ToList();
+        var comparison = StringComparison.Ordinal;
+
+        // Method(StringComparison.X, "a", "b", ...) or Method(..., StringComparison.X)
+        if (TryGetStringComparison(expressions[0], out var leading))
+        {
+            comparison = leading;
+            expressions.RemoveAt(0);
+        }
+        else if (expressions.Count > 1 && TryGetStringComparison(expressions[^1], out var trailing))
+        {
+            comparison = trailing;
+            expressions.RemoveAt(expressions.Count - 1);
+        }
+
+        if (expressions.Count == 0) return null;
+
+        // Method([...]) / Method([...], StringComparison.X)
+        if (expressions.Count == 1
+            && ArrayLiteralParser.TryGetStringElements(expressions[0], out var arrayValues, out var invalidElement))
+            return invalidElement is null && arrayValues is { Count: > 0 } ? (arrayValues, comparison) : null;
+
+        var values = new List<string>();
+        foreach (var expression in expressions)
+        {
+            if (!TryGetStringLiteral(expression, out var value)) return null;
+            values.Add(value);
+        }
+
+        // Equals takes a single value; several literals would not compile as Equals anyway.
+        return methodName == "Equals" && values.Count != 1 ? null : (values, comparison);
+    }
+
     internal static bool TryParse(ExpressionSyntax argumentExpression, out Func<string, bool>? predicate, out Diagnostic? diagnostic)
     {
         predicate = null;

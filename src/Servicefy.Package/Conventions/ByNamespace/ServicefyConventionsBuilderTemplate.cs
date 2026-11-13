@@ -48,11 +48,18 @@ internal static class ServicefyConventionsBuilderTemplate
                      /// shape fails to parse and the call site is ignored (no registration, no diagnostic).
                      /// </param>
                      /// <param name="lifetime">The lifetime used for every matched registration.</param>
+                     /// <param name="scope">
+                     /// Where candidates come from: <see cref="ConventionScope.Compilation"/> (default) scans
+                     /// this project and its project references; <see cref="ConventionScope.AllReferences"/>
+                     /// also scans every referenced NuGet package, transitive dependencies included. Must be a
+                     /// <c>ConventionScope.X</c> member access.
+                     /// </param>
                      /// <returns>The same builder, for chaining additional convention calls.</returns>
                      /// <seealso href="https://elixneto.github.io/Servicefy/conventions/by-namespace">ByNamespace — Servicefy docs</seealso>
                      IServicefyConventionsBuilder ByNamespace(
                          Func<string, bool> predicate,
                          Lifetime lifetime,
+                         ConventionScope scope = ConventionScope.Compilation,
                          [CallerArgumentExpression(nameof(predicate))] string predicateExpression = "");
 
                      /// <summary>
@@ -162,11 +169,18 @@ internal static class ServicefyConventionsBuilderTemplate
                      /// diagnostic).
                      /// </param>
                      /// <param name="lifetime">The lifetime used for every matched registration.</param>
+                     /// <param name="scope">
+                     /// Where candidates come from: <see cref="ConventionScope.Compilation"/> (default) scans
+                     /// this project and its project references; <see cref="ConventionScope.AllReferences"/>
+                     /// also scans every referenced NuGet package, transitive dependencies included. Must be a
+                     /// <c>ConventionScope.X</c> member access.
+                     /// </param>
                      /// <returns>The same builder, for chaining additional convention calls.</returns>
                      /// <seealso href="https://elixneto.github.io/Servicefy/conventions/by-type-name">ByTypeName — Servicefy docs</seealso>
                      IServicefyConventionsBuilder ByTypeName(
                          Func<string, string, bool> predicate,
                          Lifetime lifetime,
+                         ConventionScope scope = ConventionScope.Compilation,
                          [CallerArgumentExpression(nameof(predicate))] string predicateExpression = "");
 
                      /// <summary>
@@ -217,9 +231,10 @@ internal static class ServicefyConventionsBuilderTemplate
                      public IServicefyConventionsBuilder ByNamespace(
                          Func<string, bool> predicate,
                          Lifetime lifetime,
+                         ConventionScope scope = ConventionScope.Compilation,
                          [CallerArgumentExpression(nameof(predicate))] string predicateExpression = "")
                      {
-                         ApplyByNamespace(lifetime, predicateExpression);
+                         ApplyByNamespace(lifetime, scope, predicateExpression);
                          return this;
                      }
 
@@ -258,9 +273,10 @@ internal static class ServicefyConventionsBuilderTemplate
                      public IServicefyConventionsBuilder ByTypeName(
                          Func<string, string, bool> predicate,
                          Lifetime lifetime,
+                         ConventionScope scope = ConventionScope.Compilation,
                          [CallerArgumentExpression(nameof(predicate))] string predicateExpression = "")
                      {
-                         ApplyByTypeName(lifetime, predicateExpression);
+                         ApplyByTypeName(lifetime, scope, predicateExpression);
                          return this;
                      }
 
@@ -270,13 +286,13 @@ internal static class ServicefyConventionsBuilderTemplate
                      /// <inheritdoc />
                      public IServicefyConventionsBuilder Decorate(Type openGenericService, Type openGenericDecorator) => this;
 
-                     partial void ApplyByNamespace(Lifetime lifetime, string predicateExpression);
+                     partial void ApplyByNamespace(Lifetime lifetime, ConventionScope scope, string predicateExpression);
 
                      partial void ApplyByBaseType(Type baseType, Lifetime lifetime, ServiceTypeSelector selector, Type matchAttribute);
 
                      partial void ApplyByNamespaceOf(Type markerType, Lifetime lifetime, string predicateExpression);
 
-                     partial void ApplyByTypeName(Lifetime lifetime, string predicateExpression);
+                     partial void ApplyByTypeName(Lifetime lifetime, ConventionScope scope, string predicateExpression);
                  }
 
                  /// <summary>
