@@ -51,6 +51,15 @@ internal static class TypeCollector
         compilation.SourceModule.ReferencedAssemblySymbols
             .Where(assembly => IsProjectReference(compilation, assembly));
 
+    /// <summary>
+    /// Whether <paramref name="assembly"/> was resolved from the NuGet global packages folder, i.e.
+    /// comes from a <c>&lt;PackageReference&gt;</c>. Such assemblies are never scanned wholesale; a
+    /// convention may opt one in by anchoring on a type it declares (see <c>ByBaseType&lt;TBase&gt;</c>).
+    /// </summary>
+    internal static bool IsNuGetPackageAssembly(Compilation compilation, IAssemblySymbol assembly) =>
+        compilation.GetMetadataReference(assembly) is PortableExecutableReference { FilePath: { } path }
+        && path.Replace('\\', '/').IndexOf("/.nuget/packages/", StringComparison.OrdinalIgnoreCase) >= 0;
+
     // There is no compilation-level flag for "this reference came from a <ProjectReference>" — it's
     // an MSBuild concept. We approximate it from the resolved assembly path: NuGet packages restore
     // under the global packages folder, and the SDK's own reference/runtime assemblies live under
