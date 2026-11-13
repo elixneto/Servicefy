@@ -36,7 +36,8 @@ internal static class ConventionFilters
     // typically carry no registration attribute at all (SVCFY008 forbids non-keyed [Add*] on them)
     // but must still be excluded from convention-based registration — otherwise they'd be
     // registered as plain services, breaking the decorator chain.
-    internal static HashSet<INamedTypeSymbol> CollectDecoratorTypes(List<INamedTypeSymbol> types, Compilation compilation)
+    internal static HashSet<INamedTypeSymbol> CollectDecoratorTypes(
+        IEnumerable<INamedTypeSymbol> types, Compilation compilation, IEnumerable<Decorators.Analysis.DecorateCall> decorateCalls)
     {
         var decoratorTypes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
 
@@ -54,13 +55,13 @@ internal static class ConventionFilters
             }
         }
 
-        foreach (var (_, decorator, _) in Decorators.Analysis.DecorateCallCollector.Collect(compilation))
+        foreach (var (_, decorator, _) in Decorators.Analysis.DecorateCallCollector.ResolveClosed(compilation, decorateCalls))
             decoratorTypes.Add(decorator);
 
         // Open-generic decorators (.Decorate(typeof(IFoo<>), typeof(Decorator<>))) must likewise be
         // excluded from convention matching, otherwise the decorator would be registered as a plain
         // open-generic implementation of the service it decorates.
-        foreach (var (_, decorator, _) in Decorators.Analysis.DecorateCallCollector.CollectOpenGeneric(compilation))
+        foreach (var (_, decorator, _) in Decorators.Analysis.DecorateCallCollector.ResolveOpenGeneric(compilation, decorateCalls))
             decoratorTypes.Add(decorator);
 
         return decoratorTypes;

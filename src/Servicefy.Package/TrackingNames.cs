@@ -24,13 +24,22 @@ internal static class TrackingNames
     /// <summary>Compilation + collected annotated classes fed to <c>DiagnosticsByConfigurationEmitter</c>.</summary>
     public const string ByConfigurationDiagnosticsInput = "ByConfiguration.Diagnostics.Input";
 
-    /// <summary>Compilation fed to <c>RegistrationByConfigurationEmitter</c>.</summary>
+    /// <summary>Compilation + collected <c>.Decorate(...)</c> call sites fed to <c>RegistrationByConfigurationEmitter</c>.</summary>
     public const string ByConfigurationRegistrationsInput = "ByConfiguration.Registrations.Input";
+
+    /// <summary><c>.Decorate(...)</c> call sites seen by the ByConfiguration generator.</summary>
+    public const string ByConfigurationDecorateCalls = "ByConfiguration.DecorateCalls";
 
     // ── Conventions generator ────────────────────────────────────────────────────────────────
 
     /// <summary>Compilation fed to <c>ConventionsBuilderEmitter</c> (runtime API source).</summary>
     public const string ConventionsBuilderInput = "Conventions.Builder.Input";
+
+    /// <summary><c>.Decorate(...)</c> call sites seen by the conventions generator.</summary>
+    public const string ConventionsDecorateCalls = "Conventions.DecorateCalls";
+
+    /// <summary>Per-compilation type pool shared by the four convention registration emitters.</summary>
+    public const string ConventionsTypePool = "Conventions.TypePool";
 
     /// <summary><c>.ByNamespace(...)</c> call sites: parsed rule and/or diagnostic per call.</summary>
     public const string ByNamespaceResults = "Conventions.ByNamespace.Results";

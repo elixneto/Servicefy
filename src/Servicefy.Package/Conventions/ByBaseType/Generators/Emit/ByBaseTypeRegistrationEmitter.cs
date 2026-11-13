@@ -20,9 +20,10 @@ internal static class ByBaseTypeRegistrationEmitter
 {
     internal static void Emit(
         SourceProductionContext spc,
-        (Compilation Compilation, EquatableArray<ByBaseTypeConventionRule> Rules) source)
+        (ConventionTypePool Pool, EquatableArray<ByBaseTypeConventionRule> Rules) source)
     {
-        var (compilation, rules) = source;
+        var (pool, rules) = source;
+        var compilation = pool.Compilation;
 
         var distinctRules = rules
             .DistinctBy(r => (r.BaseTypeFqn, r.Lifetime, r.Selector, r.AttributeFqn))
@@ -46,15 +47,10 @@ internal static class ByBaseTypeRegistrationEmitter
 
         if (resolvedRules.Count == 0) return;
 
-        var projectReferenceAssemblies = TypeCollector.GetProjectReferenceAssemblies(compilation)
-            .ToHashSet<IAssemblySymbol>(SymbolEqualityComparer.Default);
-
-        var allTypes = TypeCollector.GetAllAccessibleTypes(compilation)
-            .Concat(TypeCollector.GetExternalAccessibleTypes(compilation))
-            .Select(t => t.Type)
-            .ToList();
-
-        var decoratorTypes = ConventionFilters.CollectDecoratorTypes(allTypes, compilation);
+        // Shared with the other convention emitters: computed once per compilation (ConventionTypePool).
+        var projectReferenceAssemblies = pool.ProjectReferenceAssemblies;
+        var allTypes = pool.AllTypes;
+        var decoratorTypes = pool.DecoratorTypes;
 
         var registrableTypes = allTypes
             .Where(t => IsRegistrable(t, decoratorTypes))
@@ -108,13 +104,13 @@ internal static class ByBaseTypeRegistrationEmitter
 
         if (ruleMatches.Count == 0) return;
 
-        var decoratorEntries = DecoratorCollector.CollectDecoratorEntries(compilation);
+        var decoratorEntries = pool.GetDecoratorEntries();
 
         // Expand open-generic .Decorate(typeof(IFoo<>), typeof(Decorator<>)) chains into closed
         // decorator entries for each closed service registered above (e.g. IRepository<Cliente> ->
         // LoggingRepository<Cliente>). Closed forms only — runtime-closed types reached through the
         // open passthrough cannot be decorated AOT-safely.
-        SynthesizeOpenGenericDecoratorEntries(compilation, closedServiceSymbols, decoratorEntries);
+        SynthesizeOpenGenericDecoratorEntries(pool, closedServiceSymbols, decoratorEntries);
 
         var validDecoratorMap = DecoratorEmitter.ValidateAndBuildDecoratorMap(spc, decoratorEntries, registeredServices);
 
@@ -377,11 +373,12 @@ internal static class ByBaseTypeRegistrationEmitter
     }
 
     private static void SynthesizeOpenGenericDecoratorEntries(
-        Compilation compilation,
+        ConventionTypePool pool,
         HashSet<INamedTypeSymbol> closedServiceSymbols,
         List<InterfaceDecoratorEntry> decoratorEntries)
     {
-        var openChains = DecoratorCollector.CollectOpenGenericChains(compilation);
+        var compilation = pool.Compilation;
+        var openChains = pool.OpenGenericChains;
         if (openChains.Count == 0) return;
 
         // An explicit closed .Decorate<IRepository<Cliente>, X>() takes precedence over the expanded
