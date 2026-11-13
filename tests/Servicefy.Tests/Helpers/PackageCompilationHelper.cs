@@ -44,6 +44,29 @@ internal sealed record PackageRunResult(
     public IReadOnlyList<Diagnostic> CompilationErrors =>
         Output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
 
+    public string? GeneratedSource(string fileName) =>
+        Output.SyntaxTrees
+            .FirstOrDefault(t => t.FilePath.EndsWith(fileName, StringComparison.Ordinal))
+            ?.ToString();
+
+    public string? ByNamespaceOfSource => GeneratedSource("ServicefyConventionsBuilder.ByNamespaceOf.g.cs");
+
+    public string? NamespaceOfBranch(string markerTypeFqn, string? lifetime = null)
+    {
+        var source = ByNamespaceOfSource;
+        if (source is null) return null;
+
+        var header = lifetime is null
+            ? $"if (markerType == typeof({markerTypeFqn}) &&"
+            : $"if (markerType == typeof({markerTypeFqn}) && lifetime == Lifetime.{lifetime} &&";
+
+        var start = source.IndexOf(header, StringComparison.Ordinal);
+        if (start < 0) return null;
+
+        var end = source.IndexOf("return;", start, StringComparison.Ordinal);
+        return end < 0 ? source[start..] : source[start..end];
+    }
+
     public string? Branch(string baseTypeFqn, string? selector = null)
     {
         if (ByBaseTypeSource is null) return null;
