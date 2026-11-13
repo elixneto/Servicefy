@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Internal
+
+- **Incremental pipeline step names** (issue #4): every pipeline step of both generators is named
+  via `WithTrackingName` (`TrackingNames`), with tests documenting which steps re-run on each edit.
+  Baseline for the caching work in #5 / #6. No change to generated code.
+
 ## [1.1.0] - 2026-07-24
 
 ### Added
