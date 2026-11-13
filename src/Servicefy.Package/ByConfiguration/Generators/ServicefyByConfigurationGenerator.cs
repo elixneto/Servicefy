@@ -17,7 +17,7 @@ public sealed class ServicefyByConfigurationGenerator : IIncrementalGenerator
     {
         // 1. Emit generated attribute source files (Lifetime, AddScoped, AddKeyed*, …)
         context.RegisterSourceOutput(
-            context.CompilationProvider,
+            context.CompilationProvider.WithTrackingName(TrackingNames.ByConfigurationAttributesInput),
             AttributeEmitter.Emit);
 
         // 2. Validate attribute usage and report compile-time diagnostics
@@ -25,15 +25,18 @@ public sealed class ServicefyByConfigurationGenerator : IIncrementalGenerator
             .CreateSyntaxProvider(
                 predicate: static (node, _) => node is ClassDeclarationSyntax { AttributeLists.Count: > 0 },
                 transform: static (ctx,  _) => (ClassDeclarationSyntax)ctx.Node)
-            .Where(static c => c is not null);
+            .Where(static c => c is not null)
+            .WithTrackingName(TrackingNames.ByConfigurationAnnotatedClasses);
 
         context.RegisterSourceOutput(
-            context.CompilationProvider.Combine(annotatedClasses.Collect()),
+            context.CompilationProvider
+                .Combine(annotatedClasses.Collect())
+                .WithTrackingName(TrackingNames.ByConfigurationDiagnosticsInput),
             DiagnosticsByConfigurationEmitter.Emit);
 
         // 3. Collect all service registrations and emit ServicefyExtensions.*.g.cs
         context.RegisterSourceOutput(
-            context.CompilationProvider,
+            context.CompilationProvider.WithTrackingName(TrackingNames.ByConfigurationRegistrationsInput),
             RegistrationByConfigurationEmitter.Emit);
     }
 }

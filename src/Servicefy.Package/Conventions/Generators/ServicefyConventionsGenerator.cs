@@ -25,14 +25,15 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
     {
         // 1. Emit the AddServicefyConventions() / ByNamespace / ByBaseType runtime API
         context.RegisterSourceOutput(
-            context.CompilationProvider,
+            context.CompilationProvider.WithTrackingName(TrackingNames.ConventionsBuilderInput),
             ConventionsBuilderEmitter.Emit);
 
         // 2. Collect .ByNamespace(predicate, lifetime) call sites
         var byNamespaceResults = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => ByNamespaceCallCollector.IsCandidate(node),
-                transform: static (ctx, _) => ByNamespaceCallCollector.Transform(ctx));
+                transform: static (ctx, _) => ByNamespaceCallCollector.Transform(ctx))
+            .WithTrackingName(TrackingNames.ByNamespaceResults);
 
         context.RegisterSourceOutput(byNamespaceResults.Collect(), static (spc, results) =>
         {
@@ -43,18 +44,22 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
 
         var byNamespaceRules = byNamespaceResults
             .Where(static r => r.Rule is not null)
-            .Select(static (r, _) => r.Rule!);
+            .Select(static (r, _) => r.Rule!)
+            .WithTrackingName(TrackingNames.ByNamespaceRules);
 
         // 3. Implement ServicefyConventionsBuilder.ApplyByNamespace for each rule
         context.RegisterSourceOutput(
-            context.CompilationProvider.Combine(byNamespaceRules.Collect()),
+            context.CompilationProvider
+                .Combine(byNamespaceRules.Collect())
+                .WithTrackingName(TrackingNames.ByNamespaceEmitInput),
             ByNamespaceRegistrationEmitter.Emit);
 
         // 4. Collect .ByBaseType<TBase>(...) and .ByBaseType(typeof(IFoo<>), ...) call sites
         var byBaseTypeResults = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => ByBaseTypeCallCollector.IsCandidate(node),
-                transform: static (ctx, _) => ByBaseTypeCallCollector.Transform(ctx));
+                transform: static (ctx, _) => ByBaseTypeCallCollector.Transform(ctx))
+            .WithTrackingName(TrackingNames.ByBaseTypeResults);
 
         context.RegisterSourceOutput(byBaseTypeResults.Collect(), static (spc, results) =>
         {
@@ -65,18 +70,22 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
 
         var byBaseTypeRules = byBaseTypeResults
             .Where(static r => r.Rule is not null)
-            .Select(static (r, _) => r.Rule!);
+            .Select(static (r, _) => r.Rule!)
+            .WithTrackingName(TrackingNames.ByBaseTypeRules);
 
         // 5. Implement ServicefyConventionsBuilder.ApplyByBaseType for each rule
         context.RegisterSourceOutput(
-            context.CompilationProvider.Combine(byBaseTypeRules.Collect()),
+            context.CompilationProvider
+                .Combine(byBaseTypeRules.Collect())
+                .WithTrackingName(TrackingNames.ByBaseTypeEmitInput),
             ByBaseTypeRegistrationEmitter.Emit);
 
         // 6. Collect .ByNamespaceOf<TMarker>(predicate, lifetime) call sites
         var byNamespaceOfResults = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => ByNamespaceOfCallCollector.IsCandidate(node),
-                transform: static (ctx, _) => ByNamespaceOfCallCollector.Transform(ctx));
+                transform: static (ctx, _) => ByNamespaceOfCallCollector.Transform(ctx))
+            .WithTrackingName(TrackingNames.ByNamespaceOfResults);
 
         context.RegisterSourceOutput(byNamespaceOfResults.Collect(), static (spc, results) =>
         {
@@ -87,18 +96,22 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
 
         var byNamespaceOfRules = byNamespaceOfResults
             .Where(static r => r.Rule is not null)
-            .Select(static (r, _) => r.Rule!);
+            .Select(static (r, _) => r.Rule!)
+            .WithTrackingName(TrackingNames.ByNamespaceOfRules);
 
         // 7. Implement ServicefyConventionsBuilder.ApplyByNamespaceOf for each rule
         context.RegisterSourceOutput(
-            context.CompilationProvider.Combine(byNamespaceOfRules.Collect()),
+            context.CompilationProvider
+                .Combine(byNamespaceOfRules.Collect())
+                .WithTrackingName(TrackingNames.ByNamespaceOfEmitInput),
             ByNamespaceOfRegistrationEmitter.Emit);
 
         // 8. Collect .ByTypeName(predicate, lifetime) call sites
         var byTypeNameResults = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => ByTypeNameCallCollector.IsCandidate(node),
-                transform: static (ctx, _) => ByTypeNameCallCollector.Transform(ctx));
+                transform: static (ctx, _) => ByTypeNameCallCollector.Transform(ctx))
+            .WithTrackingName(TrackingNames.ByTypeNameResults);
 
         context.RegisterSourceOutput(byTypeNameResults.Collect(), static (spc, results) =>
         {
@@ -109,11 +122,14 @@ public sealed class ServicefyConventionsGenerator : IIncrementalGenerator
 
         var byTypeNameRules = byTypeNameResults
             .Where(static r => r.Rule is not null)
-            .Select(static (r, _) => r.Rule!);
+            .Select(static (r, _) => r.Rule!)
+            .WithTrackingName(TrackingNames.ByTypeNameRules);
 
         // 9. Implement ServicefyConventionsBuilder.ApplyByTypeName for each rule
         context.RegisterSourceOutput(
-            context.CompilationProvider.Combine(byTypeNameRules.Collect()),
+            context.CompilationProvider
+                .Combine(byTypeNameRules.Collect())
+                .WithTrackingName(TrackingNames.ByTypeNameEmitInput),
             ByTypeNameRegistrationEmitter.Emit);
     }
 }

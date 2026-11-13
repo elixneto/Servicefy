@@ -136,7 +136,6 @@ public class Svcfy008Tests
     [Fact]
     public void SVCFY008_OnlyAffectsDecoratorClass_NotImplementation()
     {
-        // MyService is not a decorator, so [AddScoped] on it must NOT trigger SVCFY008
         var source = """
             using TestAssembly;
             namespace TestAssembly

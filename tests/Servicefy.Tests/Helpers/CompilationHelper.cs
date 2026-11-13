@@ -30,11 +30,6 @@ internal static class CompilationHelper
         return RunGenerator(compilation, parseOptions);
     }
 
-    /// <summary>
-    /// Compiles <paramref name="referencedSource"/> into a separate assembly and references it from
-    /// the main compilation as if it were a sibling project (<c>&lt;ProjectReference&gt;</c>) — i.e.
-    /// a <see cref="PortableExecutableReference"/> whose path is outside the NuGet packages folder.
-    /// </summary>
     public static (Compilation Output, ImmutableArray<Diagnostic> Diagnostics) RunGeneratorWithProjectReference(
         string source,
         string referencedSource,
@@ -45,14 +40,6 @@ internal static class CompilationHelper
             source, langVersion, (referencedSource, referencedAssemblyName));
     }
 
-    /// <summary>
-    /// Compiles a chain of <paramref name="referencedProjects"/> (each one can see the types of every
-    /// project compiled before it, like a real project-reference graph) and references all of them
-    /// from the main compilation — as if they were sibling projects (<c>&lt;ProjectReference&gt;</c>),
-    /// i.e. <see cref="PortableExecutableReference"/>s whose paths are outside the NuGet packages folder.
-    /// MSBuild flattens transitive project references into direct references, so the main compilation
-    /// gets all of them, matching what a real build would see.
-    /// </summary>
     public static (Compilation Output, ImmutableArray<Diagnostic> Diagnostics) RunGeneratorWithProjectReferences(
         string source,
         LanguageVersion langVersion = LanguageVersion.CSharp13,
