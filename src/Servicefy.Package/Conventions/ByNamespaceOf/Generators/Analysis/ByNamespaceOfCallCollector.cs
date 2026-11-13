@@ -48,6 +48,7 @@ internal static class ByNamespaceOfCallCollector
 
         return (new NamespaceOfConventionRule(
             markerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            TypeReference.CreateId(markerType),
             markerType.ContainingNamespace.ToDisplayString(),
             arguments[0].Expression.ToString(),
             lifetime), null);

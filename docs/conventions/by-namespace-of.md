@@ -70,6 +70,59 @@ the predicate is even evaluated.
 If `TMarker` is itself declared in the **global namespace**, the namespace restriction is a no-op and
 `ByNamespaceOf` behaves exactly like [`ByNamespace`](by-namespace.md).
 
+## `TMarker` from a NuGet package
+
+Candidates normally come from the project being compiled and its `<ProjectReference>`s only; NuGet
+packages are never scanned wholesale. The one exception is **the package that declares `TMarker`**:
+when `TMarker` comes from a NuGet package, that package is also used for this rule:
+
+- only `TMarker`'s **root namespace subtree** of the package is walked (e.g. `MyCompany.Contracts`
+  and `MyCompany.Contracts.*`), never the rest of the package, and never its dependencies;
+- its public concrete classes in that subtree are candidates, alongside the ones in your project;
+- its interfaces count as registrable services, so a class in your project that implements an
+  interface from the package is registered against it (interfaces from other packages or the BCL
+  still never are).
+
+**The root-namespace restriction still applies to your own types.** A type in your project is a
+candidate only if its namespace is under `TMarker`'s namespace, so to have your implementations
+picked up they must live under `MyCompany.Contracts.*`:
+
+```csharp
+// NuGet package "MyCompany.Contracts":
+namespace MyCompany.Contracts { public class ContractsMarker { } }
+namespace MyCompany.Contracts.Repositories { public interface IOrderRepository { } }
+
+// Your project:
+namespace MyCompany.Contracts.Repositories
+{
+    public class OrderRepository : IOrderRepository { }        // under the marker's tree: matched
+}
+
+namespace MyApp.Repositories
+{
+    public class LegacyOrderRepository : MyCompany.Contracts.Repositories.IOrderRepository { }
+    // outside MyCompany.Contracts: never a candidate, even though ".Repositories" matches
+}
+
+services.AddServicefyConventions()
+    .ByNamespaceOf<MyCompany.Contracts.ContractsMarker>(ns => ns.EndsWith(".Repositories"), Lifetime.Scoped);
+
+// generates:
+services.AddScoped<MyCompany.Contracts.Repositories.IOrderRepository, MyCompany.Contracts.Repositories.OrderRepository>();
+```
+
+If your implementations live in your own namespaces (like `MyApp.Repositories` above), anchor on the
+interface instead with [`ByBaseType<TBase>`](by-base-type.md#tbase-from-a-nuget-package).
+
+Things to be aware of:
+
+- **Public implementations shipped inside the package under the marker's tree are registered too**
+  when their namespace matches the predicate.
+- A `TMarker` declared in the package's **global namespace** has no subtree to prune to, so the whole
+  package is walked for that rule.
+- The walked subtree is cached per build/IDE session, so the cost is paid once, not on every edit.
+- Packages are detected by their path under the NuGet global packages folder (`.nuget/packages`).
+
 ## What gets registered
 
 Same rules as [ByNamespace](by-namespace.md#what-gets-registered): classes with zero implemented
