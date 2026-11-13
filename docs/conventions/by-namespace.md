@@ -111,7 +111,7 @@ walk: for `ns => ns.StartsWith("MyCompany.Shared")` only the `MyCompany` → `My
 namespaces of each package are walked, nothing else. Pruning applies when every namespace the
 predicate can match is guaranteed to start with a literal prefix: `StartsWith` (any of its forms,
 including several values and a `StringComparison`), `==` / `Equals` with a literal, `&&` with such a
-side, and `||` where both sides are such. `EndsWith`, `Contains`, `!` and `_ => true` cannot be pruned:
+side, and `||` where both sides are such and use the same `StringComparison`. `EndsWith`, `Contains`, `!` and `_ => true` cannot be pruned:
 every package is walked.
 
 Things to be aware of:

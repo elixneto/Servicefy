@@ -46,10 +46,11 @@ internal static class ByNamespaceCallCollector
             : (rule, null);
     }
 
-    // `_ => true`, or a StartsWith bound whose shortest prefix is only a few characters long.
+    // `_ => true`, or a StartsWith bound whose shortest prefix is only a few characters long (an exact
+    // `ns == "App"` match is narrow however short it is).
     private static bool IsTooBroad(ExpressionSyntax predicate, string predicateExpression) =>
         ConventionScopeParser.IsMatchAll(predicate)
-        || (NamespacePredicateParser.TryGetRequiredPrefixes(predicateExpression, out var prefixes, out _)
+        || (NamespacePredicateParser.TryGetRequiredOpenPrefixes(predicateExpression, out var prefixes)
             && prefixes.Any(p => p.Length < MinAllReferencesPrefixLength));
 
     private static bool TryGetLifetime(ExpressionSyntax expr, out string lifetime)

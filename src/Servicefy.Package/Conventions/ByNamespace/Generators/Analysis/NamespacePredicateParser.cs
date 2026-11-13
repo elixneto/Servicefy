@@ -40,7 +40,27 @@ internal static class NamespacePredicateParser
     internal static bool TryGetRequiredPrefixes(
         string predicateExpression, out IReadOnlyList<string> prefixes, out StringComparison comparison)
     {
-        prefixes = [];
+        var found = TryGetRequiredBounds(predicateExpression, out var bounds, out comparison);
+        prefixes = bounds.Select(b => b.Value).ToList();
+        return found;
+    }
+
+    /// <summary>
+    /// The open-ended <c>StartsWith</c> prefixes among <see cref="TryGetRequiredPrefixes"/>' bounds, i.e.
+    /// without the exact <c>==</c> / <c>Equals</c> values, which match a single namespace however short
+    /// they are. Used for the SVCFY017 "very short prefix" check.
+    /// </summary>
+    internal static bool TryGetRequiredOpenPrefixes(string predicateExpression, out IReadOnlyList<string> prefixes)
+    {
+        var found = TryGetRequiredBounds(predicateExpression, out var bounds, out _);
+        prefixes = bounds.Where(b => !b.Exact).Select(b => b.Value).ToList();
+        return found;
+    }
+
+    private static bool TryGetRequiredBounds(
+        string predicateExpression, out IReadOnlyList<(string Value, bool Exact)> bounds, out StringComparison comparison)
+    {
+        bounds = [];
         comparison = StringComparison.Ordinal;
 
         (string? parameterName, ExpressionSyntax? body) = SyntaxFactory.ParseExpression(predicateExpression) switch
@@ -56,11 +76,11 @@ internal static class NamespacePredicateParser
         var result = GetRequiredPrefixes(body, parameterName);
         if (result is null) return false;
 
-        (prefixes, comparison) = result.Value;
+        (bounds, comparison) = result.Value;
         return true;
     }
 
-    private static (IReadOnlyList<string> Prefixes, StringComparison Comparison)? GetRequiredPrefixes(ExpressionSyntax expr, string parameterName)
+    private static (IReadOnlyList<(string Value, bool Exact)> Prefixes, StringComparison Comparison)? GetRequiredPrefixes(ExpressionSyntax expr, string parameterName)
     {
         switch (expr)
         {
@@ -81,7 +101,7 @@ internal static class NamespacePredicateParser
 
             case BinaryExpressionSyntax bin when bin.IsKind(SyntaxKind.EqualsExpression):
                 return TryGetParameterAndLiteral(bin.Left, bin.Right, parameterName, out var equalTo)
-                    ? ([equalTo], StringComparison.Ordinal)
+                    ? ([(equalTo, true)], StringComparison.Ordinal)
                     : null;
 
             case InvocationExpressionSyntax
@@ -95,7 +115,7 @@ internal static class NamespacePredicateParser
         }
     }
 
-    private static (IReadOnlyList<string> Prefixes, StringComparison Comparison)? GetMethodPrefixes(
+    private static (IReadOnlyList<(string Value, bool Exact)> Prefixes, StringComparison Comparison)? GetMethodPrefixes(
         string methodName, SeparatedSyntaxList<ArgumentSyntax> arguments)
     {
         if (methodName is not ("StartsWith" or "Equals") || arguments.Count == 0) return null;
@@ -120,7 +140,9 @@ internal static class NamespacePredicateParser
         // Method([...]) / Method([...], StringComparison.X)
         if (expressions.Count == 1
             && ArrayLiteralParser.TryGetStringElements(expressions[0], out var arrayValues, out var invalidElement))
-            return invalidElement is null && arrayValues is { Count: > 0 } ? (arrayValues, comparison) : null;
+            return invalidElement is null && arrayValues is { Count: > 0 }
+                ? (arrayValues.Select(v => (v, methodName == "Equals")).ToList(), comparison)
+                : null;
 
         var values = new List<string>();
         foreach (var expression in expressions)
@@ -130,7 +152,9 @@ internal static class NamespacePredicateParser
         }
 
         // Equals takes a single value; several literals would not compile as Equals anyway.
-        return methodName == "Equals" && values.Count != 1 ? null : (values, comparison);
+        return methodName == "Equals" && values.Count != 1
+            ? null
+            : (values.Select(v => (v, methodName == "Equals")).ToList(), comparison);
     }
 
     internal static bool TryParse(ExpressionSyntax argumentExpression, out Func<string, bool>? predicate, out Diagnostic? diagnostic)
