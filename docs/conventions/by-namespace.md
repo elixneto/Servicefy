@@ -60,8 +60,9 @@ services.AddScoped<IUserNotifier, UserService>();
 
 - `StartsWith` / `EndsWith` / `Contains` / `Equals` — optionally with a `StringComparison` argument
 - `StartsWith` / `EndsWith` / `Contains` with **multiple string arguments** (params form) or an
-  **array/collection literal** of string literals — matches if **any** value matches, optionally
-  followed by a `StringComparison` argument
+  **array/collection literal** of string literals — matches if **any** value matches. A
+  `StringComparison` can precede the values (`EndsWith(StringComparison.OrdinalIgnoreCase, "Repository", "Handler")`)
+  or follow the array (`EndsWith(["Repository", "Handler"], StringComparison.OrdinalIgnoreCase)`)
 - `==` / `!=` against string literals
 - The literal `true` — matches every type (`false` is not supported, since it would match nothing)
 - `!` (negation)
@@ -70,7 +71,7 @@ services.AddScoped<IUserNotifier, UserService>();
 
 ```csharp
 .ByNamespace(ns => ns.StartsWith("MyApp.Services"), Lifetime.Scoped)
-.ByNamespace(ns => ns.EndsWith(".Infrastructure") && !nm.Contains("Tests"), Lifetime.Singleton)
+.ByNamespace(ns => ns.EndsWith(".Infrastructure") && !ns.Contains("Tests"), Lifetime.Singleton)
 .ByNamespace(ns => ns == "MyApp.Handlers", Lifetime.Transient)
 .ByNamespace(ns => ns.EndsWith("Repository", "Handler"), Lifetime.Scoped)
 .ByNamespace(ns => ns.EndsWith(["Repository", "Handler"], StringComparison.OrdinalIgnoreCase), Lifetime.Scoped)

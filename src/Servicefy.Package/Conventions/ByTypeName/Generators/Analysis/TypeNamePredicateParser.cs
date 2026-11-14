@@ -178,9 +178,23 @@ internal static class TypeNamePredicateParser
         var first = arguments[0].Expression;
 
         // Method(StringComparison.X, "a", "b", ...) — params form with a leading comparison.
+        // Method(StringComparison.X, [...]) — array passed to the params parameter.
         if (TryGetStringComparison(first, out var leadingComparison))
         {
             if (arguments.Count < 2) return false;
+
+            if (arguments.Count == 2
+                && ArrayLiteralParser.TryGetStringElements(arguments[1].Expression, out var leadingArrayValues, out var leadingInvalidElement))
+            {
+                if (leadingInvalidElement is not null)
+                {
+                    diagnostic = new SVCFY011(leadingInvalidElement.GetLocation()).CreateDiagnostic(methodName);
+                    return false;
+                }
+
+                evaluator = BuildMulti(methodName, leadingArrayValues!, leadingComparison);
+                return evaluator is not null;
+            }
 
             if (!TryGetAllStringLiterals(arguments.Skip(1), methodName, out var leadingValues, out diagnostic) || leadingValues is null)
                 return false;
@@ -222,9 +236,9 @@ internal static class TypeNamePredicateParser
                 return false;
             }
 
-            var comparison = arguments.Count > 1 && TryGetStringComparison(arguments[1].Expression, out var arrayComparison)
-                ? arrayComparison
-                : StringComparison.Ordinal;
+            var comparison = StringComparison.Ordinal;
+            if (arguments.Count > 2) return false;
+            if (arguments.Count == 2 && !TryGetStringComparison(arguments[1].Expression, out comparison)) return false;
 
             evaluator = BuildMulti(methodName, arrayValues!, comparison);
             return evaluator is not null;

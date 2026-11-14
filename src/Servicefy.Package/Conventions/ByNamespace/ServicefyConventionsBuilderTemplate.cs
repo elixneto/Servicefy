@@ -42,10 +42,12 @@ internal static class ServicefyConventionsBuilderTemplate
                      /// also accept multiple string-literal values to match against, either as separate
                      /// arguments — e.g. <c>nm =&gt; nm.EndsWith("Repository", "Handler")</c> — or as an
                      /// array/collection expression (C# 12+) — e.g.
-                     /// <c>nm =&gt; nm.EndsWith(["Repository", "Handler"])</c> — optionally preceded by a
-                     /// <see cref="StringComparison"/> (see <see cref="ServicefyStringExtensions"/>);
+                     /// <c>nm =&gt; nm.EndsWith(["Repository", "Handler"])</c>. A <see cref="StringComparison"/>
+                     /// can precede the values — e.g. <c>nm =&gt; nm.EndsWith(StringComparison.OrdinalIgnoreCase, "Repository", "Handler")</c> —
+                     /// or follow the array — e.g. <c>nm =&gt; nm.EndsWith(["Repository", "Handler"], StringComparison.OrdinalIgnoreCase)</c>
+                     /// (see <see cref="ServicefyStringExtensions"/>);
                      /// matches if any value matches. A non-literal value reports SVCFY011. Any other
-                     /// shape fails to parse and the call site is ignored (no registration, no diagnostic).
+                     /// shape fails to parse: the call site is ignored (no registration) and SVCFY012 is reported.
                      /// </param>
                      /// <param name="lifetime">The lifetime used for every matched registration.</param>
                      /// <param name="scope">
@@ -164,9 +166,11 @@ internal static class ServicefyConventionsBuilderTemplate
                      /// <c>||</c>, and parentheses), applied to either parameter — including the
                      /// multi-value form of <c>StartsWith</c>/<c>EndsWith</c>/<c>Contains</c>, e.g.
                      /// <c>(ns, name) =&gt; name.EndsWith("Repository", "Handler")</c> or
-                     /// <c>(ns, name) =&gt; name.EndsWith(["Repository", "Handler"])</c> (C# 12+). Any
-                     /// other shape fails to parse and the call site is ignored (no registration, no
-                     /// diagnostic).
+                     /// <c>(ns, name) =&gt; name.EndsWith(["Repository", "Handler"])</c> (C# 12+), with an
+                     /// optional <see cref="StringComparison"/> before the values or after the array, e.g.
+                     /// <c>(ns, name) =&gt; name.EndsWith(["Repository", "Handler"], StringComparison.OrdinalIgnoreCase)</c>. Any
+                     /// other shape fails to parse: the call site is ignored (no registration) and SVCFY012
+                     /// is reported.
                      /// </param>
                      /// <param name="lifetime">The lifetime used for every matched registration.</param>
                      /// <param name="scope">
@@ -315,7 +319,10 @@ internal static class ServicefyConventionsBuilderTemplate
                  /// String-matching helpers for <c>ByNamespace</c>/<c>ByNamespaceOf</c>/<c>ByTypeName</c>
                  /// predicates: match against any of several prefixes/suffixes/substrings without
                  /// chaining <c>||</c>, e.g. <c>name.EndsWith("Repository", "Handler", "Query")</c> or
-                 /// <c>name.EndsWith(["Repository", "Handler", "Query"])</c> (C# 12+).
+                 /// <c>name.EndsWith(["Repository", "Handler", "Query"])</c> (C# 12+). A
+                 /// <see cref="StringComparison"/> can precede the values
+                 /// (<c>name.EndsWith(StringComparison.OrdinalIgnoreCase, "Repository", "Handler")</c>) or
+                 /// follow an array (<c>name.EndsWith(["Repository", "Handler"], StringComparison.OrdinalIgnoreCase)</c>).
                  /// Only literal arguments (params or array/collection-expression) are understood by the
                  /// generator — anything else makes the call site ignored (SVCFY011).
                  /// </summary>
@@ -335,6 +342,10 @@ internal static class ServicefyConventionsBuilderTemplate
                          return false;
                      }
 
+                     /// <summary>Returns <c>true</c> if <paramref name="value"/> starts with any of <paramref name="values"/>.</summary>
+                     public static bool StartsWith(this string value, string[] values, StringComparison comparisonType)
+                         => StartsWith(value, comparisonType, values);
+
                      /// <summary>Returns <c>true</c> if <paramref name="value"/> ends with any of <paramref name="values"/> (ordinal comparison).</summary>
                      public static bool EndsWith(this string value, params string[] values)
                          => EndsWith(value, StringComparison.Ordinal, values);
@@ -349,6 +360,10 @@ internal static class ServicefyConventionsBuilderTemplate
                          return false;
                      }
 
+                     /// <summary>Returns <c>true</c> if <paramref name="value"/> ends with any of <paramref name="values"/>.</summary>
+                     public static bool EndsWith(this string value, string[] values, StringComparison comparisonType)
+                         => EndsWith(value, comparisonType, values);
+
                      /// <summary>Returns <c>true</c> if <paramref name="value"/> contains any of <paramref name="values"/> (ordinal comparison).</summary>
                      public static bool Contains(this string value, params string[] values)
                          => Contains(value, StringComparison.Ordinal, values);
@@ -362,6 +377,10 @@ internal static class ServicefyConventionsBuilderTemplate
 
                          return false;
                      }
+
+                     /// <summary>Returns <c>true</c> if <paramref name="value"/> contains any of <paramref name="values"/>.</summary>
+                     public static bool Contains(this string value, string[] values, StringComparison comparisonType)
+                         => Contains(value, comparisonType, values);
                  }
              }
              """;
