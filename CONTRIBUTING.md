@@ -6,7 +6,7 @@ source code in `tests/Servicefy.Tests`.
 
 ## Requirements
 
-- .NET SDK 8.0 or later (the package multi-targets `net8.0` and `net10.0`; `net8.0` is enough
+- .NET SDK 8.0 or later (the package multi-targets `net8.0`, `net10.0` and `net11.0`; `net8.0` is enough
   for local development)
 - C# 12+
 

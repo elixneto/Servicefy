@@ -42,7 +42,7 @@ body:
     id: tfm
     attributes:
       label: Target framework(s)
-      placeholder: e.g. net8.0, net10.0, Blazor WebAssembly, AOT-published
+      placeholder: e.g. net8.0, net10.0, net11.0, Blazor WebAssembly, AOT-published
     validations:
       required: true
 
