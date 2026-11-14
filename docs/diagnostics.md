@@ -5,7 +5,7 @@ title: Diagnostics
 # Diagnostics
 [← Back to Servicefy](./index.md)
 
-Servicefy reports compile-time diagnostics with codes `SVCFY001`–`SVCFY016` (`SVCFY004` is
+Servicefy reports compile-time diagnostics with codes `SVCFY001`–`SVCFY017` (`SVCFY004` is
 reserved/removed — see note below).
 
 | Code | Severity | Condition |
@@ -25,6 +25,7 @@ reserved/removed — see note below).
 | [SVCFY014](#svcfy014) | Error | `[Decorator]` applied to a class that does not implement exactly one interface |
 | [SVCFY015](#svcfy015) | Warning | Decorator declared both via `[DecoratorFor<T>]`/`[Decorator]` and `.Decorate<,>()` for the same service — duplicate dropped |
 | [SVCFY016](#svcfy016) | Error | `ByBaseType(Type, ...)` called with a non-generic `typeof(IFoo)` — the overload requires a generic type |
+| [SVCFY017](#svcfy017) | Warning | `ConventionScope.AllReferences` combined with a predicate that matches (almost) everything |
 
 > `SVCFY004` ("ambiguous service type") no longer exists as a separate code — classes implementing
 > multiple interfaces are registered against **all** of them instead.
@@ -262,4 +263,24 @@ Use the generic form for non-generic types:
 
 ```csharp
 .ByBaseType<IFoo>(Lifetime.Scoped);
+```
+
+## SVCFY017
+
+A [`ByNamespace`](conventions/by-namespace.md#scope) or [`ByTypeName`](conventions/by-type-name.md#scope)
+call uses `ConventionScope.AllReferences` with a predicate that matches everything (`_ => true`,
+`(ns, name) => true`) or, for `ByNamespace`, a `StartsWith` bound shorter than 4 characters. Such a call
+scans every referenced NuGet package, transitive dependencies included, and registers public classes from
+libraries you most likely did not mean to touch. The call is still applied; this is a warning.
+
+```csharp
+// SVCFY017 — every package type with a package interface would be registered.
+services.AddServicefyConventions()
+    .ByNamespace(_ => true, Lifetime.Scoped, ConventionScope.AllReferences);
+```
+
+Narrow the predicate to your own namespaces, which also lets the generator skip the rest of each package:
+
+```csharp
+.ByNamespace(ns => ns.StartsWith("MyCompany."), Lifetime.Scoped, ConventionScope.AllReferences);
 ```

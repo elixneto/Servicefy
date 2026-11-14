@@ -124,12 +124,9 @@ public class DecoratorGenerationTests
         var cacheIdx   = generatedSource.IndexOf("CacheDecorator", StringComparison.Ordinal);
         var loggingIdx = generatedSource.IndexOf("LoggingDecorator", StringComparison.Ordinal);
 
-        // innermost (UmDecorator, declared last) is emitted before CacheDecorator, which is before
-        // LoggingDecorator (declared first = outermost)
         Assert.True(umIdx < cacheIdx, "UmDecorator should appear before CacheDecorator");
         Assert.True(cacheIdx < loggingIdx, "CacheDecorator should appear before LoggingDecorator");
 
-        // non-keyed factory should point to outermost (LoggingDecorator)
         Assert.Contains("\"TestAssembly.LoggingDecorator\"", generatedSource);
         var lastKeyedRef = generatedSource.LastIndexOf("TestAssembly.LoggingDecorator", StringComparison.Ordinal);
         Assert.True(lastKeyedRef >= 0);
@@ -138,9 +135,6 @@ public class DecoratorGenerationTests
     [Fact]
     public void ChainedFluentDecorate_FirstCallIsOutermost_ChainIsCorrect()
     {
-        // Both .Decorate<,>() calls are chained off the same `services` receiver, so their
-        // invocation spans share the same Start position — only End differs. The first call
-        // in declaration order (CacheDecorator) must still be treated as the outermost layer.
         var source = """
             using TestAssembly;
             using Microsoft.Extensions.DependencyInjection;
@@ -184,11 +178,8 @@ public class DecoratorGenerationTests
         var cacheIdx   = generatedSource!.IndexOf("CacheDecorator", StringComparison.Ordinal);
         var loggingIdx = generatedSource.IndexOf("LoggingDecorator", StringComparison.Ordinal);
 
-        // innermost (LoggingDecorator, declared last) is emitted before CacheDecorator
-        // (declared first = outermost)
         Assert.True(loggingIdx < cacheIdx, "LoggingDecorator should appear before CacheDecorator");
 
-        // non-keyed factory should point to the outermost layer (CacheDecorator)
         var lastKeyedRef = generatedSource.LastIndexOf("TestAssembly.CacheDecorator", StringComparison.Ordinal);
         Assert.True(lastKeyedRef >= 0);
         Assert.Contains("GetRequiredKeyedService<global::TestAssembly.IMyService>(\"TestAssembly.CacheDecorator\")", generatedSource);
@@ -234,9 +225,7 @@ public class DecoratorGenerationTests
             .FirstOrDefault(s => s.Contains("ServicefyExtensions"));
 
         Assert.NotNull(generatedSource);
-        // UmDecorator (innermost, declared last) takes __BASE__
         Assert.Contains("GetRequiredKeyedService<global::TestAssembly.IMyService>(\"__BASE__\")", generatedSource);
-        // LoggingDecorator (outermost, declared first) takes UmDecorator key
         Assert.Contains("GetRequiredKeyedService<global::TestAssembly.IMyService>(\"TestAssembly.UmDecorator\")", generatedSource);
     }
 
@@ -328,9 +317,6 @@ public class DecoratorGenerationTests
     [Fact]
     public void Decorator_WithNonInjectableOverload_PrefersInjectableConstructor()
     {
-        // CacheDecorator has two constructors: one with (ICustomLogger, IMyService) and one
-        // with (ICustomLogger, IMyService, string). The generator must pick the injectable
-        // overload and not emit sp.GetRequiredService<string>() which would fail at runtime.
         var source = """
             using TestAssembly;
             namespace TestAssembly
@@ -368,7 +354,6 @@ public class DecoratorGenerationTests
     [Fact]
     public void Decorator_ActivatorUtilitiesConstructor_OverridesInjectableHeuristic()
     {
-        // Even if a constructor has a non-injectable param, [ActivatorUtilitiesConstructor] forces its selection.
         var source = """
             using TestAssembly;
             using Microsoft.Extensions.DependencyInjection;
@@ -398,7 +383,6 @@ public class DecoratorGenerationTests
             .FirstOrDefault(s => s.Contains("ServicefyExtensions"));
 
         Assert.NotNull(generatedSource);
-        // Should have used the 3-param ctor as instructed by [ActivatorUtilitiesConstructor]
         Assert.Contains("GetRequiredService<string>", generatedSource);
     }
 
@@ -474,9 +458,6 @@ public class DecoratorGenerationTests
     [Fact]
     public void MergedDecorators_FluentDeclaresOuterLayers_AttributeFormsInnerLayer()
     {
-        // CacheDecorator: [DecoratorFor<IMyService>] -> inner/base layer.
-        // LoggingDecorator + AuditDecorator: .Decorate<,>() calls, declaration order, first = outermost.
-        // Expected outermost -> innermost: LoggingDecorator, AuditDecorator, CacheDecorator.
         var source = """
             using TestAssembly;
             using Microsoft.Extensions.DependencyInjection;
@@ -528,13 +509,10 @@ public class DecoratorGenerationTests
         var auditIdx   = generatedSource.IndexOf("AuditDecorator", StringComparison.Ordinal);
         var loggingIdx = generatedSource.IndexOf("LoggingDecorator", StringComparison.Ordinal);
 
-        // emission is innermost-first: CacheDecorator (innermost), then AuditDecorator, then LoggingDecorator (outermost)
         Assert.True(cacheIdx < auditIdx, "CacheDecorator should appear before AuditDecorator");
         Assert.True(auditIdx < loggingIdx, "AuditDecorator should appear before LoggingDecorator");
 
-        // non-keyed resolver points at the outermost layer (LoggingDecorator)
         Assert.Contains("\"TestAssembly.LoggingDecorator\"", generatedSource);
-        // CacheDecorator (innermost) wraps __BASE__
         Assert.Contains("GetRequiredKeyedService<global::TestAssembly.IMyService>(\"__BASE__\")", generatedSource);
     }
 
@@ -603,8 +581,6 @@ public class DecoratorGenerationTests
     [Fact]
     public void DecoratorAttribute_MergesWithDecoratorForAttribute_SortedByFqn()
     {
-        // [Decorator] (inferred IMyService) and [DecoratorFor<IMyService>] both form the
-        // inner/base layer and are sorted together by fully-qualified type name.
         var source = """
             using TestAssembly;
             namespace TestAssembly
@@ -639,8 +615,6 @@ public class DecoratorGenerationTests
 
         Assert.NotNull(generatedSource);
 
-        // FQN-sorted ascending: ["TestAssembly.AuditDecorator", "TestAssembly.UmDecorator"], emitted
-        // in reverse (innermost first) -> UmDecorator (last in sorted order) is innermost.
         var auditIdx = generatedSource!.IndexOf("AuditDecorator", StringComparison.Ordinal);
         var umIdx    = generatedSource.IndexOf("UmDecorator", StringComparison.Ordinal);
 
@@ -722,9 +696,6 @@ public class DecoratorGenerationTests
 
         Assert.NotNull(generatedSource);
 
-        // LoggingDecorator must be registered exactly once under its keyed slot -
-        // a duplicate registration with the same key would make its own factory
-        // resolve itself, causing infinite recursion at runtime.
         var keyedRegistrationCount = generatedSource!
             .Split("AddKeyedScoped<global::TestAssembly.IMyService>(")
             .Length - 1;

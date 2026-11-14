@@ -19,12 +19,12 @@ internal static class DecoratorCollector
     /// closed services a convention registers are known.
     /// </summary>
     internal static List<(INamedTypeSymbol UnboundService, List<INamedTypeSymbol> UnboundDecorators, Location Location)> CollectOpenGenericChains(
-        Compilation compilation)
+        Compilation compilation, IEnumerable<DecorateCall> decorateCalls)
     {
         var byService = new Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol Decorator, Location Location)>>(
             SymbolEqualityComparer.Default);
 
-        foreach (var (service, decorator, location) in DecorateCallCollector.CollectOpenGeneric(compilation))
+        foreach (var (service, decorator, location) in DecorateCallCollector.ResolveOpenGeneric(compilation, decorateCalls))
         {
             if (!byService.TryGetValue(service, out var list))
                 byService[service] = list = [];
@@ -55,16 +55,20 @@ internal static class DecoratorCollector
         return chains;
     }
 
-    internal static List<InterfaceDecoratorEntry> CollectDecoratorEntries(Compilation compilation)
+    /// <param name="allTypes">
+    /// Every type to scan for <c>[DecoratorFor&lt;T&gt;]</c> / <c>[Decorator]</c> (source + referenced
+    /// projects), already enumerated by the caller so the walk is shared with other consumers.
+    /// </param>
+    /// <param name="decorateCalls">The <c>.Decorate(...)</c> call sites collected by the generator pipeline.</param>
+    internal static List<InterfaceDecoratorEntry> CollectDecoratorEntries(
+        Compilation compilation, IEnumerable<INamedTypeSymbol> allTypes, IEnumerable<DecorateCall> decorateCalls)
     {
-        var allTypes = TypeCollector.GetAllAccessibleTypes(compilation)
-            .Concat(TypeCollector.GetExternalAccessibleTypes(compilation));
 
         // Pass 1: [DecoratorFor<TService>] attributes on classes — inner/base layer, sorted by FQN.
         var attributeDecorators = new Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol Decorator, Location? Location)>>(
             SymbolEqualityComparer.Default);
 
-        foreach (var (type, _) in allTypes)
+        foreach (var type in allTypes)
         {
             if (type.TypeKind != TypeKind.Class) continue;
 
@@ -107,7 +111,7 @@ internal static class DecoratorCollector
         var fluentDecorators = new Dictionary<INamedTypeSymbol, List<(INamedTypeSymbol Decorator, Location Location)>>(
             SymbolEqualityComparer.Default);
 
-        foreach (var (service, decorator, location) in DecorateCallCollector.Collect(compilation))
+        foreach (var (service, decorator, location) in DecorateCallCollector.ResolveClosed(compilation, decorateCalls))
         {
             if (service.TypeKind != TypeKind.Interface) continue;
 

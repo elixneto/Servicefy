@@ -249,6 +249,48 @@ services.AddServicefyConventions()
 > closed `.Decorate<IRepository<Cliente>, X>()` takes precedence over the expanded open-generic chain
 > for that service.
 
+## `TBase` from a NuGet package
+
+Candidates normally come from the project being compiled and its `<ProjectReference>`s only; NuGet
+packages are never scanned wholesale. The one exception is **the package that declares `TBase`**:
+when `TBase` comes from a NuGet package, that package — and only that package, not its own
+dependencies — is also used for this rule:
+
+- its public concrete classes are candidates, alongside the ones in your project;
+- its interfaces count as registrable services, so `ImplementedInterfaces` /
+  `AllImplementedInterfaces` / `SelfWithInterfaces` register against them (interfaces from other
+  packages or the BCL still never are).
+
+The scope is exactly what you typed: the anchor is inferred from `TBase`, nothing else is scanned.
+
+```csharp
+// NuGet package "MyCompany.Contracts":
+namespace MyCompany.Contracts;
+public interface IRepository<T> { }
+
+// Your project:
+public class OrderRepository : MyCompany.Contracts.IRepository<Order> { }
+
+services.AddServicefyConventions()
+    .ByBaseType<MyCompany.Contracts.IRepository<Order>>(Lifetime.Scoped, ServiceTypeSelector.ImplementedInterfaces);
+
+// generates:
+services.AddScoped<MyCompany.Contracts.IRepository<Order>, OrderRepository>();
+```
+
+Things to be aware of:
+
+- **Public implementations shipped inside the package are registered too** (e.g. a default
+  `InMemoryRepository : IRepository<Order>` in the package). Use `matchAttribute` or a more specific
+  `TBase` if that is not what you want.
+- Under `ImplementedInterfaces`, **any** interface of the package that a matched class implements
+  directly is registered, not just `TBase`.
+- The anchor package is walked once per build/IDE session and cached, but a `TBase` from a very large
+  package (thousands of public types) still costs that walk once.
+- Open-generic rules (`ByBaseType(typeof(IFoo<>), ...)`) whose definition lives in a NuGet package
+  are not anchored yet: only your project and project references are scanned for them.
+- Packages are detected by their path under the NuGet global packages folder (`.nuget/packages`).
+
 ## Interop with ByConfiguration
 
 Types already annotated with a [ByConfiguration](../byconfiguration/index.md) attribute (`[Add*]`,
@@ -257,6 +299,8 @@ Types already annotated with a [ByConfiguration](../byconfiguration/index.md) at
 ## Known limitations
 
 - `TBase = object` matches **every** concrete class in the assembly — use with care.
+- Only the NuGet package declaring `TBase` is scanned, never its dependencies (see
+  [`TBase` from a NuGet package](#tbase-from-a-nuget-package)).
 - Overlapping rules (`ByNamespace` + `ByBaseType`, or two `ByBaseType` rules targeting the same type) can
   produce **duplicate registrations** — there is no cross-rule deduplication.
 

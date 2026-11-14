@@ -9,7 +9,7 @@ namespace Servicefy.Tests.Helpers;
 
 internal static class CompilationHelper
 {
-    private static readonly IEnumerable<MetadataReference> BaseReferences =
+    internal static readonly IEnumerable<MetadataReference> BaseReferences =
     [
         MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
         MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location),
@@ -30,11 +30,6 @@ internal static class CompilationHelper
         return RunGenerator(compilation, parseOptions);
     }
 
-    /// <summary>
-    /// Compiles <paramref name="referencedSource"/> into a separate assembly and references it from
-    /// the main compilation as if it were a sibling project (<c>&lt;ProjectReference&gt;</c>) — i.e.
-    /// a <see cref="PortableExecutableReference"/> whose path is outside the NuGet packages folder.
-    /// </summary>
     public static (Compilation Output, ImmutableArray<Diagnostic> Diagnostics) RunGeneratorWithProjectReference(
         string source,
         string referencedSource,
@@ -45,14 +40,6 @@ internal static class CompilationHelper
             source, langVersion, (referencedSource, referencedAssemblyName));
     }
 
-    /// <summary>
-    /// Compiles a chain of <paramref name="referencedProjects"/> (each one can see the types of every
-    /// project compiled before it, like a real project-reference graph) and references all of them
-    /// from the main compilation — as if they were sibling projects (<c>&lt;ProjectReference&gt;</c>),
-    /// i.e. <see cref="PortableExecutableReference"/>s whose paths are outside the NuGet packages folder.
-    /// MSBuild flattens transitive project references into direct references, so the main compilation
-    /// gets all of them, matching what a real build would see.
-    /// </summary>
     public static (Compilation Output, ImmutableArray<Diagnostic> Diagnostics) RunGeneratorWithProjectReferences(
         string source,
         LanguageVersion langVersion = LanguageVersion.CSharp13,
@@ -63,26 +50,7 @@ internal static class CompilationHelper
         var references = BaseReferences.ToList();
 
         foreach (var (referencedSource, referencedAssemblyName) in referencedProjects)
-        {
-            var referencedCompilation = CSharpCompilation.Create(
-                assemblyName: referencedAssemblyName,
-                syntaxTrees: [CSharpSyntaxTree.ParseText(referencedSource, parseOptions)],
-                references: references,
-                options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-
-            using var peStream = new MemoryStream();
-            var emitResult = referencedCompilation.Emit(peStream);
-            if (!emitResult.Success)
-                throw new InvalidOperationException(
-                    $"Failed to compile referenced project '{referencedAssemblyName}': " +
-                    string.Join(Environment.NewLine, emitResult.Diagnostics));
-
-            var projectReference = AssemblyMetadata
-                .CreateFromImage(peStream.ToArray().ToImmutableArray())
-                .GetReference(filePath: $@"E:\fake\{referencedAssemblyName}\bin\Debug\net8.0\{referencedAssemblyName}.dll");
-
-            references.Add(projectReference);
-        }
+            references.Add(CreateProjectReference(referencedSource, referencedAssemblyName, references, parseOptions));
 
         var compilation = CSharpCompilation.Create(
             assemblyName: "TestAssembly",
@@ -91,6 +59,32 @@ internal static class CompilationHelper
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
         return RunGenerator(compilation, parseOptions);
+    }
+
+    public static PortableExecutableReference CreateProjectReference(
+        string source,
+        string assemblyName,
+        IEnumerable<MetadataReference>? references = null,
+        CSharpParseOptions? parseOptions = null)
+    {
+        parseOptions ??= CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.CSharp13);
+
+        var referencedCompilation = CSharpCompilation.Create(
+            assemblyName: assemblyName,
+            syntaxTrees: [CSharpSyntaxTree.ParseText(source, parseOptions)],
+            references: references ?? BaseReferences,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        using var peStream = new MemoryStream();
+        var emitResult = referencedCompilation.Emit(peStream);
+        if (!emitResult.Success)
+            throw new InvalidOperationException(
+                $"Failed to compile referenced project '{assemblyName}': " +
+                string.Join(Environment.NewLine, emitResult.Diagnostics));
+
+        return AssemblyMetadata
+            .CreateFromImage(peStream.ToArray().ToImmutableArray())
+            .GetReference(filePath: $@"E:\fake\{assemblyName}\bin\Debug\net8.0\{assemblyName}.dll");
     }
 
     private static (Compilation Output, ImmutableArray<Diagnostic> Diagnostics) RunGenerator(

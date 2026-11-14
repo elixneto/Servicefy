@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Servicefy.Package.ByConfiguration.Generators.Emit;
+using Servicefy.Package.Decorators.Analysis;
 
 namespace Servicefy.Package.ByConfiguration.Generators;
 
@@ -17,7 +18,7 @@ public sealed class ServicefyByConfigurationGenerator : IIncrementalGenerator
     {
         // 1. Emit generated attribute source files (Lifetime, AddScoped, AddKeyed*, …)
         context.RegisterSourceOutput(
-            context.CompilationProvider,
+            context.CompilationProvider.WithTrackingName(TrackingNames.ByConfigurationAttributesInput),
             AttributeEmitter.Emit);
 
         // 2. Validate attribute usage and report compile-time diagnostics
@@ -25,15 +26,30 @@ public sealed class ServicefyByConfigurationGenerator : IIncrementalGenerator
             .CreateSyntaxProvider(
                 predicate: static (node, _) => node is ClassDeclarationSyntax { AttributeLists.Count: > 0 },
                 transform: static (ctx,  _) => (ClassDeclarationSyntax)ctx.Node)
-            .Where(static c => c is not null);
+            .Where(static c => c is not null)
+            .WithTrackingName(TrackingNames.ByConfigurationAnnotatedClasses);
 
         context.RegisterSourceOutput(
-            context.CompilationProvider.Combine(annotatedClasses.Collect()),
+            context.CompilationProvider
+                .Combine(annotatedClasses.Collect())
+                .WithTrackingName(TrackingNames.ByConfigurationDiagnosticsInput),
             DiagnosticsByConfigurationEmitter.Emit);
 
         // 3. Collect all service registrations and emit ServicefyExtensions.*.g.cs
+        //    .Decorate(...) call sites are collected incrementally (only edited files are re-examined)
+        //    instead of walking every syntax tree on each run.
+        var decorateCalls = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) => DecorateCallCollector.IsCandidate(node),
+                transform: static (ctx, _) => DecorateCallCollector.Transform(ctx))
+            .Where(static c => c is not null)
+            .Select(static (c, _) => c!)
+            .WithTrackingName(TrackingNames.ByConfigurationDecorateCalls);
+
         context.RegisterSourceOutput(
-            context.CompilationProvider,
+            context.CompilationProvider
+                .Combine(decorateCalls.Collect())
+                .WithTrackingName(TrackingNames.ByConfigurationRegistrationsInput),
             RegistrationByConfigurationEmitter.Emit);
     }
 }

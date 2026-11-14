@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Servicefy.Package.Conventions.Generators.Analysis;
 using Servicefy.Package.Conventions.Models;
 using Servicefy.Package.Diagnostics;
+using Servicefy.Package.Pipeline;
 
 namespace Servicefy.Package.Conventions.ByBaseType.Generators.Analysis;
 
@@ -30,7 +31,7 @@ internal static class ByBaseTypeCallCollector
         && invocation.ArgumentList.Arguments.Count is >= 2 and <= 4
         && invocation.ArgumentList.Arguments[0].Expression is TypeOfExpressionSyntax;
 
-    internal static (ByBaseTypeConventionRule? Rule, Diagnostic? Diagnostic) Transform(GeneratorSyntaxContext context)
+    internal static (ByBaseTypeConventionRule? Rule, DiagnosticInfo? Diagnostic) Transform(GeneratorSyntaxContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
         var memberAccess = (MemberAccessExpressionSyntax)invocation.Expression;
@@ -76,7 +77,7 @@ internal static class ByBaseTypeCallCollector
             {
                 // typeof(IFoo) — non-generic: the Type overload is for generics; SVCFY016.
                 var name = resolved.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                return (null, new SVCFY016(baseTypeLocation).CreateDiagnostic(name));
+                return (null, DiagnosticInfo.From(new SVCFY016(baseTypeLocation).CreateDiagnostic(name)));
             }
 
             (lifetimeIndex, selectorIndex, attributeIndex) = (1, 2, 3);
@@ -132,14 +133,30 @@ internal static class ByBaseTypeCallCollector
             }
         }
 
+        // Symbols don't survive across compilations: keep reference ids instead and resolve them
+        // at emit time (see TypeReference). A type that can't be referenced is skipped, as an
+        // unresolvable type argument was before.
+        var baseTypeId = TypeReference.CreateId(baseType);
+        if (baseTypeId is null)
+            return (null, null);
+
+        string? attributeTypeId = null;
+        if (attributeType is not null)
+        {
+            attributeTypeId = TypeReference.CreateId(attributeType);
+            if (attributeTypeId is null)
+                return (null, null);
+        }
+
         var rule = new ByBaseTypeConventionRule(
-            baseType,
+            baseTypeId,
             baseTypeFqn,
+            baseType.TypeKind == TypeKind.Interface,
             lifetime,
             selector,
-            attributeType,
+            attributeTypeId,
             attributeType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-            baseTypeLocation,
+            LocationInfo.From(baseTypeLocation),
             isOpenGeneric);
 
         return (rule, null);
