@@ -28,7 +28,16 @@ internal static class IncrementalGeneratorHelper
     {
         var parseOptions = CSharpParseOptions.Default.WithLanguageVersion(langVersion);
 
-        Compilation compilation = CreateCompilation(sources, parseOptions, additionalReferences);
+        return RunSequence(CreateCompilation(sources, parseOptions, additionalReferences), edits);
+    }
+
+    public static IReadOnlyList<(Compilation Compilation, GeneratorDriverRunResult Result)> RunSequence(
+        Compilation initial,
+        IEnumerable<Func<Compilation, Compilation>> edits)
+    {
+        var parseOptions = (CSharpParseOptions)initial.SyntaxTrees.First().Options;
+
+        var compilation = initial;
         var driver = CreateDriver(parseOptions);
 
         var runs = new List<(Compilation, GeneratorDriverRunResult)>();

@@ -23,6 +23,8 @@ internal sealed class ConventionTypePool
     private readonly Lazy<HashSet<INamedTypeSymbol>> _decoratorTypes;
     private readonly Lazy<List<InterfaceDecoratorEntry>> _decoratorEntries;
     private readonly Lazy<List<(INamedTypeSymbol UnboundService, List<INamedTypeSymbol> UnboundDecorators, Location Location)>> _openGenericChains;
+    private readonly Lazy<List<IAssemblySymbol>> _packageAssemblies;
+    private readonly Lazy<HashSet<IAssemblySymbol>> _allReferencesRegistrableAssemblies;
 
     public ConventionTypePool(Compilation compilation, ImmutableArray<DecorateCall> decorateCalls)
     {
@@ -43,6 +45,10 @@ internal sealed class ConventionTypePool
             () => DecoratorCollector.CollectDecoratorEntries(Compilation, AllTypes, _decorateCalls));
         _openGenericChains = new Lazy<List<(INamedTypeSymbol, List<INamedTypeSymbol>, Location)>>(
             () => DecoratorCollector.CollectOpenGenericChains(Compilation, _decorateCalls));
+        _packageAssemblies = new Lazy<List<IAssemblySymbol>>(
+            () => TypeCollector.GetPackageReferenceAssemblies(Compilation).ToList());
+        _allReferencesRegistrableAssemblies = new Lazy<HashSet<IAssemblySymbol>>(
+            () => new HashSet<IAssemblySymbol>(ProjectReferenceAssemblies.Concat(_packageAssemblies.Value), SymbolEqualityComparer.Default));
     }
 
     public Compilation Compilation { get; }
@@ -65,4 +71,25 @@ internal sealed class ConventionTypePool
     /// <summary>Open-generic <c>.Decorate(typeof(IFoo&lt;&gt;), typeof(D&lt;&gt;))</c> chains per unbound service.</summary>
     public IReadOnlyList<(INamedTypeSymbol UnboundService, List<INamedTypeSymbol> UnboundDecorators, Location Location)> OpenGenericChains
         => _openGenericChains.Value;
+
+    /// <summary>
+    /// Assemblies whose interfaces are registrable under <c>ConventionScope.AllReferences</c>:
+    /// project references plus every referenced NuGet package (see <see cref="TypeCollector.GetPackageReferenceAssemblies"/>).
+    /// </summary>
+    public HashSet<IAssemblySymbol> AllReferencesRegistrableAssemblies => _allReferencesRegistrableAssemblies.Value;
+
+    /// <summary>
+    /// Candidates under <c>ConventionScope.AllReferences</c>: <see cref="AllTypes"/> plus the public types of
+    /// every referenced NuGet package. With <paramref name="namespacePrefixes"/>, packages are only walked
+    /// under the namespaces that can start with one of them (see <see cref="TypeCollector"/>); each walk is
+    /// cached per assembly/namespace symbol, so it happens once per reference set, not on every edit.
+    /// </summary>
+    public IEnumerable<INamedTypeSymbol> GetAllReferencesTypes(IReadOnlyList<string>? namespacePrefixes, StringComparison comparison) =>
+        AllTypes.Concat(_packageAssemblies.Value.SelectMany(assembly => namespacePrefixes is null
+            ? TypeCollector.GetAccessibleTypes(assembly)
+            : TypeCollector.GetAccessibleTypes(assembly, namespacePrefixes, comparison)));
+
+    /// <summary>Whether <paramref name="type"/> comes from a NuGet package (not from source or a project reference).</summary>
+    public bool IsPackageType(INamedTypeSymbol type) =>
+        !type.Locations.Any(l => l.IsInSource) && !ProjectReferenceAssemblies.Contains(type.ContainingAssembly);
 }

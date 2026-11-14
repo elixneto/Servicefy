@@ -21,5 +21,9 @@ internal static class ConventionsBuilderEmitter
         spc.AddSource(
             "ServiceTypeSelector.g.cs",
             SourceText.From(ServiceTypeSelectorEnum.Value(ns), Encoding.UTF8));
+
+        spc.AddSource(
+            "ConventionScope.g.cs",
+            SourceText.From(ConventionScopeEnum.Value(ns), Encoding.UTF8));
     }
 }

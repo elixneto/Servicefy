@@ -41,6 +41,8 @@ internal sealed record PackageRunResult(
     ImmutableArray<Diagnostic> GeneratorDiagnostics,
     string? ByBaseTypeSource)
 {
+    public Compilation? Input { get; init; }
+
     public IReadOnlyList<Diagnostic> CompilationErrors =>
         Output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
 
@@ -118,16 +120,28 @@ internal static class PackageCompilationHelper
 
     public static ImmutableArray<MetadataReference> BaseReferences => FrameworkReferences.Value;
 
-    public static PackageRunResult Run(string source, params ReferencedAssembly[] referencedAssemblies)
+    public static PackageRunResult Run(string source, params ReferencedAssembly[] referencedAssemblies) =>
+        Run(CreateCompilation(source, referencedAssemblies));
+
+    public static CSharpCompilation CreateCompilation(string source, params ReferencedAssembly[] referencedAssemblies) =>
+        CreateCompilation(
+            source,
+            BuildReferences(CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.CSharp13), referencedAssemblies));
+
+    public static CSharpCompilation CreateCompilation(string source, IEnumerable<MetadataReference> references)
     {
         var parseOptions = CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.CSharp13);
-        var references = BuildReferences(parseOptions, referencedAssemblies);
 
-        var compilation = CSharpCompilation.Create(
+        return CSharpCompilation.Create(
             assemblyName: AssemblyName,
             syntaxTrees: [CSharpSyntaxTree.ParseText(source, parseOptions, path: "Consumer.cs")],
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+    }
+
+    public static PackageRunResult Run(Compilation compilation)
+    {
+        var parseOptions = (CSharpParseOptions)compilation.SyntaxTrees.First().Options;
 
         var generators = new IIncrementalGenerator[]
         {
@@ -143,7 +157,7 @@ internal static class PackageCompilationHelper
             .FirstOrDefault(t => t.FilePath.EndsWith("ServicefyConventionsBuilder.ByBaseType.g.cs", StringComparison.Ordinal))
             ?.ToString();
 
-        return new PackageRunResult(output, diagnostics, byBaseType);
+        return new PackageRunResult(output, diagnostics, byBaseType) { Input = compilation };
     }
 
     public static object? RunStaticMethod(
