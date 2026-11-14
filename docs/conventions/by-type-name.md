@@ -61,9 +61,10 @@ services.AddScoped<IUserRepository, UserRepository>();
 built from:
 
 - `StartsWith` / `EndsWith` / `Contains` / `Equals` on either parameter — optionally with a `StringComparison` argument
-- `StartsWith` / `EndsWith` / `Contains` on either parameter with **multiple string arguments** (params
-  form) or an **array/collection literal** of string literals — matches if **any** value matches,
-  optionally followed by a `StringComparison` argument
+- `StartsWith` / `EndsWith` / `Contains` on either parameter with **multiple string arguments** (params form) or an
+  **array/collection literal** of string literals — matches if **any** value matches. A
+  `StringComparison` can precede the values (`EndsWith(StringComparison.OrdinalIgnoreCase, "Repository", "Handler")`)
+  or follow the array (`EndsWith(["Repository", "Handler"], StringComparison.OrdinalIgnoreCase)`)
 - `==` / `!=` against string literals, on either parameter
 - The literal `true` — matches every type (`false` is not supported, since it would match nothing)
 - `!` (negation)
