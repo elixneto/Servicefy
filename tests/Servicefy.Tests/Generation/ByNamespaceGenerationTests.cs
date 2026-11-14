@@ -654,8 +654,6 @@ public class ByNamespaceGenerationTests
     [Fact]
     public void ByNamespace_DecoratorDeclaredInUpstreamProject_RegistersFullDecoratorChain()
     {
-        // "Abstractions": shared library declaring the interface, its [DecoratorFor<T>] attribute,
-        // and the decorator implementation.
         var abstractionsSource = """
             using System;
 
@@ -674,8 +672,6 @@ public class ByNamespaceGenerationTests
             }
             """;
 
-        // "Features": references Abstractions, declares the base implementation that gets
-        // registered by convention from the entry-point project.
         var featuresSource = """
             using Shared.Decorators;
 
@@ -685,7 +681,6 @@ public class ByNamespaceGenerationTests
             }
             """;
 
-        // Entry point (e.g. GRO.Api): references Features (and transitively Abstractions).
         var source = """
             namespace TestAssembly
             {

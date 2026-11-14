@@ -578,11 +578,7 @@ public class ByBaseTypeGenerationTests
         Assert.Contains("baseType == typeof(global::TestAssembly.IRepository<>)", generatedSource);
         Assert.Contains("Services.AddScoped<global::TestAssembly.IClienteRepository, global::TestAssembly.ClienteRepository>();", generatedSource);
         Assert.Contains("Services.AddScoped<global::TestAssembly.IPedidoRepository, global::TestAssembly.PedidoRepository>();", generatedSource);
-        // The open implementation MongoRepository<T> registers its directly declared open interface
-        // IRepository<T> via the open-generic passthrough (interpretation A).
         Assert.Contains("Services.AddScoped(typeof(global::TestAssembly.IRepository<>), typeof(global::TestAssembly.MongoRepository<>));", generatedSource);
-        // ImplementedInterfaces registers only directly declared interfaces, so no *closed*
-        // IRepository<Cliente> from the concrete types — only the open form above.
         Assert.DoesNotContain("IRepository<global::TestAssembly.Cliente>", generatedSource);
     }
 
@@ -620,8 +616,6 @@ public class ByBaseTypeGenerationTests
     [Fact]
     public void ByBaseType_OpenGeneric_OpenImplementation_RegistersOpenGenericPassthrough()
     {
-        // Acceptance criteria: an open implementation Repository<T> : IRepository<T> with no concrete
-        // closed type is registered against the unbound service via Add(typeof(IRepository<>), typeof(Repository<>)).
         var source = """
             namespace TestAssembly
             {
@@ -653,9 +647,6 @@ public class ByBaseTypeGenerationTests
     [Fact]
     public void ByBaseType_OpenGeneric_ResolvesClosedServiceAtRuntime()
     {
-        // The headline acceptance criterion, executed for real: build a ServiceProvider from the
-        // generated registrations and confirm IRepository<Order> resolves to Repository<Order> —
-        // even though Order is never closed over at compile time.
         var source = """
             using Microsoft.Extensions.DependencyInjection;
 
@@ -683,7 +674,6 @@ public class ByBaseTypeGenerationTests
 
         var result = Assert.IsType<string>(RuntimeCompilationHelper.RunStaticMethod(source, "TestAssembly.Acceptance", "Resolve"));
 
-        // Reflection FullName for Repository<Order> is "TestAssembly.Repository`1[[TestAssembly.Order, ...]]".
         Assert.StartsWith("TestAssembly.Repository`1[[TestAssembly.Order,", result);
     }
 
@@ -712,7 +702,6 @@ public class ByBaseTypeGenerationTests
             ?.ToString();
 
         Assert.NotNull(generatedSource);
-        // Default selector registers against the constructed closed interface only.
         Assert.Contains("Services.AddScoped<global::TestAssembly.IRepository<global::TestAssembly.Cliente>, global::TestAssembly.ClienteRepository>();", generatedSource);
         Assert.Contains("Services.AddScoped<global::TestAssembly.IRepository<global::TestAssembly.Pedido>, global::TestAssembly.PedidoRepository>();", generatedSource);
         Assert.DoesNotContain("IClienteRepository", generatedSource);
@@ -762,10 +751,8 @@ public class ByBaseTypeGenerationTests
             ?.ToString();
 
         Assert.NotNull(generatedSource);
-        // The closed IRepository<Cliente> is wrapped by the constructed LoggingRepository<Cliente>.
         Assert.Contains("AddKeyedScoped<global::TestAssembly.IRepository<global::TestAssembly.Cliente>, global::TestAssembly.ClienteRepository>(\"__BASE__\");", generatedSource);
         Assert.Contains("new global::TestAssembly.LoggingRepository<global::TestAssembly.Cliente>(", generatedSource);
-        // The decorator itself is not registered as a plain open implementation of IRepository<>.
         Assert.DoesNotContain("typeof(global::TestAssembly.LoggingRepository<>)", generatedSource);
     }
 
@@ -796,15 +783,12 @@ public class ByBaseTypeGenerationTests
 
         var result = Assert.IsType<string>(RuntimeCompilationHelper.RunStaticMethod(source, "TestAssembly.Acceptance", "Resolve"));
 
-        // LoggingRepository<Cliente> wraps the base ClienteRepository.
         Assert.Equal("LoggingRepository`1|ClienteRepository", result);
     }
 
     [Fact]
     public void ByBaseType_ClosedTypeof_IsEquivalentToGenericForm()
     {
-        // Acceptance criteria: typeof(IRepository<Cliente>) must behave exactly like
-        // ByBaseType<IRepository<Cliente>>(...) — a normal closed-type match, no SVCFY016.
         var typeofSource = OpenGenericRepositorySource + """
 
             namespace TestAssembly
@@ -845,7 +829,6 @@ public class ByBaseTypeGenerationTests
 
         var typeofBody = Body(typeofOutput);
         Assert.NotNull(typeofBody);
-        // Closed typeof matches only ClienteRepository's directly declared IClienteRepository.
         Assert.Contains("Services.AddScoped<global::TestAssembly.IClienteRepository, global::TestAssembly.ClienteRepository>();", typeofBody);
         Assert.DoesNotContain("PedidoRepository", typeofBody);
         Assert.Equal(Body(genericOutput), typeofBody);
