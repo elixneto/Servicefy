@@ -1,9 +1,11 @@
+using System.Collections.Immutable;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Servicefy.Package.ByConfiguration.Generators.Analysis;
 using Servicefy.Package.ByConfiguration.Models;
 using Servicefy.Package.Decorators;
+using Servicefy.Package.Decorators.Analysis;
 using Servicefy.Package.Diagnostics;
 
 namespace Servicefy.Package.ByConfiguration.Generators.Emit;
@@ -15,9 +17,10 @@ namespace Servicefy.Package.ByConfiguration.Generators.Emit;
 /// </summary>
 internal static class RegistrationByConfigurationEmitter
 {
-    internal static void Emit(SourceProductionContext spc, Compilation compilation)
+    internal static void Emit(SourceProductionContext spc, (Compilation Compilation, ImmutableArray<DecorateCall> DecorateCalls) source)
     {
-        var (serviceRegs, keyedRegs, configRegs, decoratorEntries) = CollectRegistrations(compilation);
+        var (compilation, decorateCalls) = source;
+        var (serviceRegs, keyedRegs, configRegs, decoratorEntries) = CollectRegistrations(compilation, decorateCalls);
         var referencedNamespaces = AggregationScanner.GetReferencedServicefyNamespaces(compilation);
 
         var validDecoratorMap = ValidateAndBuildDecoratorMap(spc, serviceRegs, decoratorEntries);
@@ -50,7 +53,7 @@ internal static class RegistrationByConfigurationEmitter
         List<KeyedServiceRegistration> Keyed,
         List<ConfigurationRegistration> Config,
         List<InterfaceDecoratorEntry> Decorators)
-    CollectRegistrations(Compilation compilation)
+    CollectRegistrations(Compilation compilation, ImmutableArray<DecorateCall> decorateCalls)
     {
         var service = new List<ServiceRegistration>();
         var keyed   = new List<KeyedServiceRegistration>();
@@ -68,7 +71,11 @@ internal static class RegistrationByConfigurationEmitter
                 CollectFromAttribute(attr, type, assemblyKey, typeNs, compilation, service, keyed, config);
         }
 
-        var decorators = DecoratorCollector.CollectDecoratorEntries(compilation);
+        // [DecoratorFor<T>] / [Decorator] may sit on types of referenced projects too.
+        var decoratorScanTypes = TypeCollector.GetAllAccessibleTypes(compilation)
+            .Concat(TypeCollector.GetExternalAccessibleTypes(compilation))
+            .Select(t => t.Type);
+        var decorators = DecoratorCollector.CollectDecoratorEntries(compilation, decoratorScanTypes, decorateCalls);
 
         return (service, keyed, config, decorators);
     }

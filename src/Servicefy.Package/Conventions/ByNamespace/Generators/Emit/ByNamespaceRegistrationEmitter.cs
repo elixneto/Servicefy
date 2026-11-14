@@ -20,9 +20,10 @@ internal static class ByNamespaceRegistrationEmitter
 {
     internal static void Emit(
         SourceProductionContext spc,
-        (Compilation Compilation, EquatableArray<NamespaceConventionRule> Rules) source)
+        (ConventionTypePool Pool, EquatableArray<NamespaceConventionRule> Rules) source)
     {
-        var (compilation, rules) = source;
+        var (pool, rules) = source;
+        var compilation = pool.Compilation;
 
         var distinctRules = rules
             .DistinctBy(r => (r.PredicateExpression, r.Lifetime))
@@ -40,15 +41,10 @@ internal static class ByNamespaceRegistrationEmitter
 
         if (distinctRules.Count == 0) return;
 
-        var projectReferenceAssemblies = TypeCollector.GetProjectReferenceAssemblies(compilation)
-            .ToHashSet<IAssemblySymbol>(SymbolEqualityComparer.Default);
-
-        var allTypes = TypeCollector.GetAllAccessibleTypes(compilation)
-            .Concat(TypeCollector.GetExternalAccessibleTypes(compilation))
-            .Select(t => t.Type)
-            .ToList();
-
-        var decoratorTypes = ConventionFilters.CollectDecoratorTypes(allTypes, compilation);
+        // Shared with the other convention emitters: computed once per compilation (ConventionTypePool).
+        var projectReferenceAssemblies = pool.ProjectReferenceAssemblies;
+        var allTypes = pool.AllTypes;
+        var decoratorTypes = pool.DecoratorTypes;
 
         var namespaceGroups = allTypes
             .Where(t => IsRegistrable(t, decoratorTypes, projectReferenceAssemblies))
@@ -80,7 +76,7 @@ internal static class ByNamespaceRegistrationEmitter
 
         if (ruleMatches.Count == 0) return;
 
-        var decoratorEntries = DecoratorCollector.CollectDecoratorEntries(compilation);
+        var decoratorEntries = pool.GetDecoratorEntries();
         var validDecoratorMap = DecoratorEmitter.ValidateAndBuildDecoratorMap(spc, decoratorEntries, registeredServices);
 
         var ns = compilation.AssemblyName ?? "Servicefy";
@@ -130,10 +126,11 @@ internal static class ByNamespaceRegistrationEmitter
         && !type.IsAbstract
         && !type.IsStatic
         && type.TypeParameters.Length == 0
-        && ConventionFilters.GetRegistrableInterfaces(type, projectReferenceAssemblies).Any()
+        // cheap checks first: interfaces/attributes of metadata types are decoded lazily
         && !ConventionFilters.InfrastructureTypeNames.Contains(type.Name)
-        && !ConventionFilters.HasByConfigurationAttribute(type)
-        && !decoratorTypes.Contains(type);
+        && !decoratorTypes.Contains(type)
+        && ConventionFilters.GetRegistrableInterfaces(type, projectReferenceAssemblies).Any()
+        && !ConventionFilters.HasByConfigurationAttribute(type);
 
     private static bool EvaluatePredicate(Func<string, bool> predicate, string @namespace)
     {

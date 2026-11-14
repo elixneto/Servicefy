@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Servicefy.Package.ByConfiguration.Generators.Emit;
+using Servicefy.Package.Decorators.Analysis;
 
 namespace Servicefy.Package.ByConfiguration.Generators;
 
@@ -35,8 +36,20 @@ public sealed class ServicefyByConfigurationGenerator : IIncrementalGenerator
             DiagnosticsByConfigurationEmitter.Emit);
 
         // 3. Collect all service registrations and emit ServicefyExtensions.*.g.cs
+        //    .Decorate(...) call sites are collected incrementally (only edited files are re-examined)
+        //    instead of walking every syntax tree on each run.
+        var decorateCalls = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) => DecorateCallCollector.IsCandidate(node),
+                transform: static (ctx, _) => DecorateCallCollector.Transform(ctx))
+            .Where(static c => c is not null)
+            .Select(static (c, _) => c!)
+            .WithTrackingName(TrackingNames.ByConfigurationDecorateCalls);
+
         context.RegisterSourceOutput(
-            context.CompilationProvider.WithTrackingName(TrackingNames.ByConfigurationRegistrationsInput),
+            context.CompilationProvider
+                .Combine(decorateCalls.Collect())
+                .WithTrackingName(TrackingNames.ByConfigurationRegistrationsInput),
             RegistrationByConfigurationEmitter.Emit);
     }
 }

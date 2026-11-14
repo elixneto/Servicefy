@@ -13,23 +13,64 @@ internal static class IncrementalGeneratorHelper
     public static IncrementalRun RunWithEdit(
         IEnumerable<(string Path, string Source)> sources,
         Func<Compilation, Compilation> edit,
-        LanguageVersion langVersion = LanguageVersion.CSharp13)
+        LanguageVersion langVersion = LanguageVersion.CSharp13,
+        IEnumerable<MetadataReference>? additionalReferences = null)
+    {
+        var steps = RunSequence(sources, [edit], langVersion, additionalReferences);
+        return new IncrementalRun(steps[0].Result, steps[1].Result, steps[0].Compilation, steps[1].Compilation);
+    }
+
+    public static IReadOnlyList<(Compilation Compilation, GeneratorDriverRunResult Result)> RunSequence(
+        IEnumerable<(string Path, string Source)> sources,
+        IEnumerable<Func<Compilation, Compilation>> edits,
+        LanguageVersion langVersion = LanguageVersion.CSharp13,
+        IEnumerable<MetadataReference>? additionalReferences = null)
     {
         var parseOptions = CSharpParseOptions.Default.WithLanguageVersion(langVersion);
 
-        Compilation compilation = CSharpCompilation.Create(
+        Compilation compilation = CreateCompilation(sources, parseOptions, additionalReferences);
+        var driver = CreateDriver(parseOptions);
+
+        var runs = new List<(Compilation, GeneratorDriverRunResult)>();
+
+        driver = driver.RunGenerators(compilation);
+        runs.Add((compilation, driver.GetRunResult()));
+
+        foreach (var edit in edits)
+        {
+            compilation = edit(compilation);
+            driver = driver.RunGenerators(compilation);
+            runs.Add((compilation, driver.GetRunResult()));
+        }
+
+        return runs;
+    }
+
+    public static GeneratorDriverRunResult RunFresh(Compilation compilation)
+    {
+        var parseOptions = (CSharpParseOptions)compilation.SyntaxTrees.First().Options;
+        return CreateDriver(parseOptions).RunGenerators(compilation).GetRunResult();
+    }
+
+    public static CSharpCompilation CreateCompilation(
+        IEnumerable<(string Path, string Source)> sources,
+        CSharpParseOptions parseOptions,
+        IEnumerable<MetadataReference>? additionalReferences = null) =>
+        CSharpCompilation.Create(
             assemblyName: AssemblyName,
             syntaxTrees: sources.Select(s => CSharpSyntaxTree.ParseText(s.Source, parseOptions, path: s.Path)),
-            references: CompilationHelper.BaseReferences,
+            references: CompilationHelper.BaseReferences.Concat(additionalReferences ?? []),
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
+    private static GeneratorDriver CreateDriver(CSharpParseOptions parseOptions)
+    {
         var generators = new IIncrementalGenerator[]
         {
             new ServicefyByConfigurationGenerator(),
             new ServicefyConventionsGenerator(),
         };
 
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+        return CSharpGeneratorDriver.Create(
             generators: generators.Select(g => g.AsSourceGenerator()),
             additionalTexts: null,
             parseOptions: parseOptions,
@@ -37,15 +78,6 @@ internal static class IncrementalGeneratorHelper
             driverOptions: new GeneratorDriverOptions(
                 disabledOutputs: IncrementalGeneratorOutputKind.None,
                 trackIncrementalGeneratorSteps: true));
-
-        driver = driver.RunGenerators(compilation);
-        var initial = driver.GetRunResult();
-
-        var editedCompilation = edit(compilation);
-        driver = driver.RunGenerators(editedCompilation);
-        var edited = driver.GetRunResult();
-
-        return new IncrementalRun(initial, edited);
     }
 }
 
@@ -82,13 +114,30 @@ internal static class CompilationEdits
     public static Func<Compilation, Compilation> Combine(params Func<Compilation, Compilation>[] edits) =>
         c => edits.Aggregate(c, (current, edit) => edit(current));
 
+    public static Func<Compilation, Compilation> ReplaceReference(MetadataReference oldReference, MetadataReference newReference) =>
+        c => c.ReplaceReference(oldReference, newReference);
+
+    public static Func<Compilation, Compilation> RemoveReference(MetadataReference reference) =>
+        c => c.RemoveReferences(reference);
+
+    public static Func<Compilation, Compilation> RemoveSource(string path) =>
+        c => c.RemoveSyntaxTrees(FindTree(c, path));
+
     private static SyntaxTree FindTree(Compilation c, string path) =>
         c.SyntaxTrees.SingleOrDefault(t => t.FilePath == path)
         ?? throw new InvalidOperationException($"No syntax tree with path '{path}' in the compilation.");
 }
 
-internal sealed class IncrementalRun(GeneratorDriverRunResult initial, GeneratorDriverRunResult edited)
+internal sealed class IncrementalRun(
+    GeneratorDriverRunResult initial,
+    GeneratorDriverRunResult edited,
+    Compilation initialCompilation,
+    Compilation editedCompilation)
 {
+    public Compilation InitialCompilation { get; } = initialCompilation;
+
+    public Compilation EditedCompilation { get; } = editedCompilation;
+
     public const string SourceOutputStepName = "SourceOutput";
 
     public GeneratorDriverRunResult Initial { get; } = initial;

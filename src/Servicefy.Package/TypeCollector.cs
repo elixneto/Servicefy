@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.CodeAnalysis;
 
 namespace Servicefy.Package;
@@ -26,12 +27,25 @@ internal static class TypeCollector
         Compilation compilation)
     {
         foreach (var assembly in GetProjectReferenceAssemblies(compilation))
-        foreach (var type in WalkNamespace(assembly.GlobalNamespace))
-        {
-            if (IsExternallyAccessible(type))
-                yield return (type, assembly.Name);
-        }
+        foreach (var type in GetAccessibleTypes(assembly))
+            yield return (type, assembly.Name);
     }
+
+    /// <summary>
+    /// The publicly visible types of a referenced (metadata) assembly, walked once per assembly symbol.
+    /// </summary>
+    /// <remarks>
+    /// Roslyn reuses the same <see cref="IAssemblySymbol"/> for an unchanged reference across the
+    /// compilations produced by successive edits, so keying a weak cache on it means a referenced
+    /// assembly is walked once per reference set instead of on every keystroke. The table holds the
+    /// symbol weakly, so entries go away together with the compilations that use them.
+    /// </remarks>
+    internal static IReadOnlyList<INamedTypeSymbol> GetAccessibleTypes(IAssemblySymbol assembly) =>
+        AccessibleTypesByAssembly.GetValue(
+            assembly,
+            static a => WalkNamespace(a.GlobalNamespace).Where(IsExternallyAccessible).ToArray());
+
+    private static readonly ConditionalWeakTable<IAssemblySymbol, INamedTypeSymbol[]> AccessibleTypesByAssembly = new();
 
     internal static IEnumerable<IAssemblySymbol> GetProjectReferenceAssemblies(Compilation compilation) =>
         compilation.SourceModule.ReferencedAssemblySymbols

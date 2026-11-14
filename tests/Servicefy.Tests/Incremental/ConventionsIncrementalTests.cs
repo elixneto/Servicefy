@@ -11,6 +11,7 @@ public class ConventionsIncrementalTests
     private static readonly string[] CompilationBasedSteps =
     [
         TrackingNames.ConventionsBuilderInput,
+        TrackingNames.ConventionsTypePool,
         TrackingNames.ByNamespaceEmitInput,
         TrackingNames.ByBaseTypeEmitInput,
         TrackingNames.ByNamespaceOfEmitInput,
@@ -57,7 +58,7 @@ public class ConventionsIncrementalTests
 
     [Theory]
     [MemberData(nameof(NonDiEdits.Names), MemberType = typeof(NonDiEdits))]
-    public void NonDiEdit_BuilderInputAndEmitInputs_AreModified(string edit)
+    public void NonDiEdit_BuilderInputTypePoolAndEmitInputs_AreModified(string edit)
     {
         var run = IncrementalGeneratorHelper.RunWithEdit(IncrementalTestProject.Sources, NonDiEdits.Get(edit));
 
@@ -107,7 +108,7 @@ public class ConventionsIncrementalTests
         var outputs = run.EditedSourceOutputSteps<ServicefyConventionsGenerator>();
         Assert.Equal(9, outputs.Length);
 
-        foreach (var name in CompilationBasedSteps)
+        foreach (var name in CompilationBasedSteps.Except([TrackingNames.ConventionsTypePool]))
             AssertAllReasons(
                 IncrementalStepRunReason.Modified,
                 run.EditedSourceOutputReasonsFedBy<ServicefyConventionsGenerator>(name),
@@ -147,6 +148,17 @@ public class ConventionsIncrementalTests
         var reasons = IncrementalRun.Reasons(diagnosticsOutputs);
         Assert.Equal(3, reasons.Count(r => r == IncrementalStepRunReason.Cached));
         Assert.Single(reasons, IncrementalStepRunReason.Unchanged);
+    }
+
+    [Fact]
+    public void RerunOverSameCompilation_TypePool_IsCached()
+    {
+        var run = IncrementalGeneratorHelper.RunWithEdit(IncrementalTestProject.Sources, CompilationEdits.None);
+
+        Assert.Equal([IncrementalStepRunReason.Cached], run.EditedReasons<ServicefyConventionsGenerator>(TrackingNames.ConventionsTypePool));
+        Assert.Same(
+            run.InitialValues<ServicefyConventionsGenerator>(TrackingNames.ConventionsTypePool).Single(),
+            run.EditedValues<ServicefyConventionsGenerator>(TrackingNames.ConventionsTypePool).Single());
     }
 
     [Fact]
