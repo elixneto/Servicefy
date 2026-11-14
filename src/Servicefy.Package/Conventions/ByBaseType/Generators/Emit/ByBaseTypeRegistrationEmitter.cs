@@ -41,7 +41,7 @@ internal static class ByBaseTypeRegistrationEmitter
                 spc.ReportDiagnostic(new SVCFY010(r.BaseTypeLocation?.ToLocation()).CreateDiagnostic(r.BaseTypeFqn));
                 return false;
             })
-            .Select(r => ResolvedRule.Resolve(compilation, r))
+            .Select(r => ResolvedRule.Resolve(compilation, r, pool.ProjectReferenceAssemblies))
             .OfType<ResolvedRule>()
             .ToList();
 
@@ -55,6 +55,21 @@ internal static class ByBaseTypeRegistrationEmitter
         var registrableTypes = allTypes
             .Where(t => IsRegistrable(t, decoratorTypes))
             .ToList();
+
+        // Anchor-scoped NuGet scanning (issue #7): when TBase is declared in a NuGet package, that one
+        // package is also scanned for implementations, and its interfaces become registrable for the
+        // rule — nothing else from the dependency graph. Walked once per assembly (TypeCollector cache).
+        var anchorRegistrableTypes = new Dictionary<IAssemblySymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
+        foreach (var anchor in resolvedRules.Select(r => r.AnchorAssembly).OfType<IAssemblySymbol>())
+        {
+            if (anchorRegistrableTypes.ContainsKey(anchor)) continue;
+
+            var anchorTypes = TypeCollector.GetAccessibleTypes(anchor);
+            var anchorDecorators = ConventionFilters.CollectDecoratorTypes(anchorTypes, compilation, []);
+            anchorRegistrableTypes[anchor] = anchorTypes
+                .Where(t => IsRegistrable(t, decoratorTypes) && !anchorDecorators.Contains(t))
+                .ToList();
+        }
 
         // Open-generic implementations (e.g. Repository<T> : IRepository<T>) are excluded from
         // registrableTypes (which only carries concrete, closed types) and matched separately:
@@ -72,7 +87,11 @@ internal static class ByBaseTypeRegistrationEmitter
 
         foreach (var rule in resolvedRules)
         {
-            var matchedTypes = registrableTypes
+            var candidateTypes = rule.AnchorAssembly is null
+                ? registrableTypes
+                : registrableTypes.Concat(anchorRegistrableTypes[rule.AnchorAssembly]);
+
+            var matchedTypes = candidateTypes
                 .Where(t => IsAssignableTo(t, rule.BaseType, rule.IsOpenGeneric))
                 .Where(t => rule.AttributeType is null || HasAttribute(t, rule.AttributeType))
                 .OrderBy(t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
@@ -91,14 +110,14 @@ internal static class ByBaseTypeRegistrationEmitter
 
             ruleMatches.Add((rule, matchedTypes, matchedOpenTypes));
 
-            foreach (var service in GetTargetServiceSymbols(matchedTypes, rule, projectReferenceAssemblies))
+            foreach (var service in GetTargetServiceSymbols(matchedTypes, rule, rule.RegistrableAssemblies))
             {
                 registeredServices.Add(service.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
                 closedServiceSymbols.Add(service);
             }
 
             foreach (var impl in matchedOpenTypes)
-            foreach (var service in GetOpenServiceForms(impl, rule, projectReferenceAssemblies))
+            foreach (var service in GetOpenServiceForms(impl, rule, rule.RegistrableAssemblies))
                 registeredServices.Add(UnboundFqn(service));
         }
 
@@ -133,7 +152,7 @@ internal static class ByBaseTypeRegistrationEmitter
             sb.AppendLine($"            if (baseType == typeof({rule.BaseTypeFqn}) && lifetime == Lifetime.{rule.Lifetime} && selector == ServiceTypeSelector.{rule.Selector} && matchAttribute == {attributeExpr})");
             sb.AppendLine("            {");
 
-            EmitRegistrations(sb, "                ", rule, matchedTypes, openTypes, validDecoratorMap, projectReferenceAssemblies);
+            EmitRegistrations(sb, "                ", rule, matchedTypes, openTypes, validDecoratorMap, rule.RegistrableAssemblies);
 
             sb.AppendLine("                return;");
             sb.AppendLine("            }");
@@ -530,9 +549,16 @@ internal static class ByBaseTypeRegistrationEmitter
         string Selector,
         INamedTypeSymbol? AttributeType,
         string? AttributeFqn,
-        bool IsOpenGeneric)
+        bool IsOpenGeneric,
+        IAssemblySymbol? AnchorAssembly,
+        HashSet<IAssemblySymbol> RegistrableAssemblies)
     {
-        public static ResolvedRule? Resolve(Compilation compilation, ByBaseTypeConventionRule rule)
+        /// <param name="projectReferenceAssemblies">
+        /// Assemblies whose interfaces are registrable for every rule; the rule's NuGet anchor
+        /// assembly, if any, is added for this rule only.
+        /// </param>
+        public static ResolvedRule? Resolve(
+            Compilation compilation, ByBaseTypeConventionRule rule, HashSet<IAssemblySymbol> projectReferenceAssemblies)
         {
             var baseType = TypeReference.Resolve(compilation, rule.BaseTypeId, unbound: rule.IsOpenGeneric);
             if (baseType is null) return null;
@@ -544,8 +570,21 @@ internal static class ByBaseTypeRegistrationEmitter
                 if (attributeType is null) return null;
             }
 
+            // TBase declared in a NuGet package anchors that package (issue #7). Open-generic rules
+            // (typeof(IFoo<>)) are out of scope for now and keep today's behavior.
+            var anchor = !rule.IsOpenGeneric
+                         && baseType.ContainingAssembly is { } containing
+                         && TypeCollector.IsNuGetPackageAssembly(compilation, containing)
+                ? containing
+                : null;
+
+            var registrableAssemblies = anchor is null
+                ? projectReferenceAssemblies
+                : new HashSet<IAssemblySymbol>(projectReferenceAssemblies, SymbolEqualityComparer.Default) { anchor };
+
             return new ResolvedRule(
-                baseType, rule.BaseTypeFqn, rule.Lifetime, rule.Selector, attributeType, rule.AttributeFqn, rule.IsOpenGeneric);
+                baseType, rule.BaseTypeFqn, rule.Lifetime, rule.Selector, attributeType, rule.AttributeFqn, rule.IsOpenGeneric,
+                anchor, registrableAssemblies);
         }
     }
 }
