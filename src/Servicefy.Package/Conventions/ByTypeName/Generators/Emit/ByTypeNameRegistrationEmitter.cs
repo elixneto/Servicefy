@@ -4,6 +4,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Servicefy.Package.Conventions.Generators.Emit;
 using Servicefy.Package.Conventions.Models;
+using Servicefy.Package.Pipeline;
+using Servicefy.Package.Conventions.ByTypeName.Generators.Analysis;
 using Servicefy.Package.Decorators;
 
 namespace Servicefy.Package.Conventions.ByTypeName.Generators.Emit;
@@ -18,13 +20,23 @@ internal static class ByTypeNameRegistrationEmitter
 {
     internal static void Emit(
         SourceProductionContext spc,
-        (Compilation Compilation, ImmutableArray<TypeNameConventionRule> Rules) source)
+        (Compilation Compilation, EquatableArray<TypeNameConventionRule> Rules) source)
     {
         var (compilation, rules) = source;
 
         var distinctRules = rules
             .DistinctBy(r => (r.PredicateExpression, r.Lifetime))
             .ToList();
+
+        // Rules carry the predicate as text (value-equatable pipeline model); turn each back into
+        // a matching function once per emit. A predicate that no longer parses was already
+        // reported (SVCFY011/012) when its call site was collected, so its rule is just skipped.
+        var predicates = new Dictionary<TypeNameConventionRule, Func<string, string, bool>>();
+        foreach (var rule in distinctRules)
+            if (TypeNamePredicateParser.ParseText(rule.PredicateExpression) is { } parsed)
+                predicates[rule] = parsed;
+
+        distinctRules = distinctRules.Where(predicates.ContainsKey).ToList();
 
         if (distinctRules.Count == 0) return;
 
@@ -51,7 +63,7 @@ internal static class ByTypeNameRegistrationEmitter
         foreach (var rule in distinctRules)
         {
             var matchedTypes = candidates
-                .Where(t => EvaluatePredicate(rule.Predicate, t.ContainingNamespace.ToDisplayString(), t.Name))
+                .Where(t => EvaluatePredicate(predicates[rule], t.ContainingNamespace.ToDisplayString(), t.Name))
                 .OrderBy(t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
                 .ToList();
 

@@ -4,6 +4,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Servicefy.Package.Conventions.Generators.Emit;
 using Servicefy.Package.Conventions.Models;
+using Servicefy.Package.Pipeline;
+using Servicefy.Package.Conventions.ByNamespace.Generators.Analysis;
 using Servicefy.Package.Decorators;
 
 namespace Servicefy.Package.Conventions.ByNamespace.Generators.Emit;
@@ -18,13 +20,23 @@ internal static class ByNamespaceRegistrationEmitter
 {
     internal static void Emit(
         SourceProductionContext spc,
-        (Compilation Compilation, ImmutableArray<NamespaceConventionRule> Rules) source)
+        (Compilation Compilation, EquatableArray<NamespaceConventionRule> Rules) source)
     {
         var (compilation, rules) = source;
 
         var distinctRules = rules
             .DistinctBy(r => (r.PredicateExpression, r.Lifetime))
             .ToList();
+
+        // Rules carry the predicate as text (value-equatable pipeline model); turn each back into
+        // a matching function once per emit. A predicate that no longer parses was already
+        // reported (SVCFY011/012) when its call site was collected, so its rule is just skipped.
+        var predicates = new Dictionary<NamespaceConventionRule, Func<string, bool>>();
+        foreach (var rule in distinctRules)
+            if (NamespacePredicateParser.ParseText(rule.PredicateExpression) is { } parsed)
+                predicates[rule] = parsed;
+
+        distinctRules = distinctRules.Where(predicates.ContainsKey).ToList();
 
         if (distinctRules.Count == 0) return;
 
@@ -52,7 +64,7 @@ internal static class ByNamespaceRegistrationEmitter
         foreach (var rule in distinctRules)
         {
             var matchedTypes = namespaceGroups
-                .Where(g => EvaluatePredicate(rule.Predicate, g.Key))
+                .Where(g => EvaluatePredicate(predicates[rule], g.Key))
                 .SelectMany(g => g)
                 .OrderBy(t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
                 .ToList();

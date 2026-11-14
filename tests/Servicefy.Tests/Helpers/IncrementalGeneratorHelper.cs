@@ -76,6 +76,12 @@ internal static class CompilationEdits
         return c.AddSyntaxTrees(CSharpSyntaxTree.ParseText(source, parseOptions, path: path));
     };
 
+    public static Func<Compilation, Compilation> InsertAfter(string path, string anchor, string newText) =>
+        ReplaceText(path, anchor, anchor + newText);
+
+    public static Func<Compilation, Compilation> Combine(params Func<Compilation, Compilation>[] edits) =>
+        c => edits.Aggregate(c, (current, edit) => edit(current));
+
     private static SyntaxTree FindTree(Compilation c, string path) =>
         c.SyntaxTrees.SingleOrDefault(t => t.FilePath == path)
         ?? throw new InvalidOperationException($"No syntax tree with path '{path}' in the compilation.");
@@ -111,6 +117,14 @@ internal sealed class IncrementalRun(GeneratorDriverRunResult initial, Generator
         where TGenerator : IIncrementalGenerator =>
         Reasons(InitialSteps<TGenerator>(trackingName));
 
+    public IReadOnlyList<object> InitialValues<TGenerator>(string trackingName)
+        where TGenerator : IIncrementalGenerator =>
+        Values(InitialSteps<TGenerator>(trackingName));
+
+    public IReadOnlyList<object> EditedValues<TGenerator>(string trackingName)
+        where TGenerator : IIncrementalGenerator =>
+        Values(EditedSteps<TGenerator>(trackingName));
+
     public ImmutableArray<IncrementalGeneratorRunStep> EditedSourceOutputSteps<TGenerator>()
         where TGenerator : IIncrementalGenerator =>
         EditedResult<TGenerator>().TrackedOutputSteps.TryGetValue(SourceOutputStepName, out var steps)
@@ -142,6 +156,9 @@ internal sealed class IncrementalRun(GeneratorDriverRunResult initial, Generator
 
     public static IReadOnlyList<IncrementalStepRunReason> Reasons(IEnumerable<IncrementalGeneratorRunStep> steps) =>
         steps.SelectMany(step => step.Outputs).Select(output => output.Reason).ToList();
+
+    public static IReadOnlyList<object> Values(IEnumerable<IncrementalGeneratorRunStep> steps) =>
+        steps.SelectMany(step => step.Outputs).Select(output => output.Value).ToList();
 
     private static GeneratorRunResult ResultOf<TGenerator>(GeneratorDriverRunResult run) =>
         run.Results.Single(r => r.Generator.GetGeneratorType() == typeof(TGenerator));

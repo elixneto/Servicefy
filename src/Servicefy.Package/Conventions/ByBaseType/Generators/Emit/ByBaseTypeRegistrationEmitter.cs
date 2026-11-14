@@ -6,6 +6,7 @@ using Servicefy.Package.Conventions.Generators.Emit;
 using Servicefy.Package.Conventions.Models;
 using Servicefy.Package.Decorators;
 using Servicefy.Package.Diagnostics;
+using Servicefy.Package.Pipeline;
 
 namespace Servicefy.Package.Conventions.ByBaseType.Generators.Emit;
 
@@ -19,7 +20,7 @@ internal static class ByBaseTypeRegistrationEmitter
 {
     internal static void Emit(
         SourceProductionContext spc,
-        (Compilation Compilation, ImmutableArray<ByBaseTypeConventionRule> Rules) source)
+        (Compilation Compilation, EquatableArray<ByBaseTypeConventionRule> Rules) source)
     {
         var (compilation, rules) = source;
 
@@ -31,17 +32,19 @@ internal static class ByBaseTypeRegistrationEmitter
 
         // SVCFY010: Self ignores TBase entirely and registers the matched concrete types as
         // themselves, so an interface TBase (which carries no usable "self" type) is rejected.
-        distinctRules = distinctRules
+        var resolvedRules = distinctRules
             .Where(r =>
             {
-                if (r.Selector != "Self" || r.BaseType.TypeKind != TypeKind.Interface) return true;
+                if (r.Selector != "Self" || !r.BaseTypeIsInterface) return true;
 
-                spc.ReportDiagnostic(new SVCFY010(r.BaseTypeLocation).CreateDiagnostic(r.BaseTypeFqn));
+                spc.ReportDiagnostic(new SVCFY010(r.BaseTypeLocation?.ToLocation()).CreateDiagnostic(r.BaseTypeFqn));
                 return false;
             })
+            .Select(r => ResolvedRule.Resolve(compilation, r))
+            .OfType<ResolvedRule>()
             .ToList();
 
-        if (distinctRules.Count == 0) return;
+        if (resolvedRules.Count == 0) return;
 
         var projectReferenceAssemblies = TypeCollector.GetProjectReferenceAssemblies(compilation)
             .ToHashSet<IAssemblySymbol>(SymbolEqualityComparer.Default);
@@ -67,11 +70,11 @@ internal static class ByBaseTypeRegistrationEmitter
         // First pass: compute matched types per rule and union all target service FQNs so
         // decorator validation runs once across the whole compilation (avoids duplicate
         // SVCFY007 diagnostics when multiple rules target overlapping interfaces).
-        var ruleMatches = new List<(ByBaseTypeConventionRule Rule, List<INamedTypeSymbol> MatchedTypes, List<INamedTypeSymbol> OpenTypes)>();
+        var ruleMatches = new List<(ResolvedRule Rule, List<INamedTypeSymbol> MatchedTypes, List<INamedTypeSymbol> OpenTypes)>();
         var registeredServices = new HashSet<string>(StringComparer.Ordinal);
         var closedServiceSymbols = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
 
-        foreach (var rule in distinctRules)
+        foreach (var rule in resolvedRules)
         {
             var matchedTypes = registrableTypes
                 .Where(t => IsAssignableTo(t, rule.BaseType, rule.IsOpenGeneric))
@@ -151,7 +154,7 @@ internal static class ByBaseTypeRegistrationEmitter
     private static void EmitRegistrations(
         StringBuilder sb,
         string indent,
-        ByBaseTypeConventionRule rule,
+        ResolvedRule rule,
         List<INamedTypeSymbol> matchedTypes,
         List<INamedTypeSymbol> openTypes,
         Dictionary<string, InterfaceDecoratorEntry> validDecoratorMap,
@@ -243,7 +246,7 @@ internal static class ByBaseTypeRegistrationEmitter
     private static void EmitAgainstInterfaces(
         StringBuilder sb,
         string indent,
-        ByBaseTypeConventionRule rule,
+        ResolvedRule rule,
         List<INamedTypeSymbol> matchedTypes,
         Dictionary<string, InterfaceDecoratorEntry> validDecoratorMap,
         HashSet<IAssemblySymbol> projectReferenceAssemblies,
@@ -275,7 +278,7 @@ internal static class ByBaseTypeRegistrationEmitter
     private static void EmitOpenRegistrations(
         StringBuilder sb,
         string indent,
-        ByBaseTypeConventionRule rule,
+        ResolvedRule rule,
         List<INamedTypeSymbol> openTypes,
         HashSet<IAssemblySymbol> projectReferenceAssemblies)
     {
@@ -301,7 +304,7 @@ internal static class ByBaseTypeRegistrationEmitter
     // Only generic, user-defined services whose type arguments are exactly the implementation's own
     // type parameters (in order) qualify — the shape MS.DI's open-generic mapping requires.
     private static IEnumerable<INamedTypeSymbol> GetOpenServiceForms(
-        INamedTypeSymbol impl, ByBaseTypeConventionRule rule, HashSet<IAssemblySymbol> projectReferenceAssemblies)
+        INamedTypeSymbol impl, ResolvedRule rule, HashSet<IAssemblySymbol> projectReferenceAssemblies)
     {
         switch (rule.Selector)
         {
@@ -421,7 +424,7 @@ internal static class ByBaseTypeRegistrationEmitter
     // Used for decorator wiring and to seed the registered-service set (the open-generic passthrough
     // services are unbound and contributed separately).
     private static IEnumerable<INamedTypeSymbol> GetTargetServiceSymbols(
-        List<INamedTypeSymbol> matchedTypes, ByBaseTypeConventionRule rule, HashSet<IAssemblySymbol> projectReferenceAssemblies)
+        List<INamedTypeSymbol> matchedTypes, ResolvedRule rule, HashSet<IAssemblySymbol> projectReferenceAssemblies)
     {
         switch (rule.Selector)
         {
@@ -518,4 +521,34 @@ internal static class ByBaseTypeRegistrationEmitter
 
     private static bool HasAttribute(INamedTypeSymbol type, INamedTypeSymbol attributeType) =>
         type.GetAttributes().Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attributeType));
+
+    // A rule with its type references resolved against the current compilation. Rules travel the
+    // incremental pipeline as value-equatable ids (no symbols), so they are bound here, once per emit.
+    // A type that no longer resolves (e.g. it was deleted) drops the rule, the same way an
+    // unresolvable type argument dropped the call site before.
+    private sealed record ResolvedRule(
+        INamedTypeSymbol BaseType,
+        string BaseTypeFqn,
+        string Lifetime,
+        string Selector,
+        INamedTypeSymbol? AttributeType,
+        string? AttributeFqn,
+        bool IsOpenGeneric)
+    {
+        public static ResolvedRule? Resolve(Compilation compilation, ByBaseTypeConventionRule rule)
+        {
+            var baseType = TypeReference.Resolve(compilation, rule.BaseTypeId, unbound: rule.IsOpenGeneric);
+            if (baseType is null) return null;
+
+            INamedTypeSymbol? attributeType = null;
+            if (rule.AttributeTypeId is not null)
+            {
+                attributeType = TypeReference.Resolve(compilation, rule.AttributeTypeId);
+                if (attributeType is null) return null;
+            }
+
+            return new ResolvedRule(
+                baseType, rule.BaseTypeFqn, rule.Lifetime, rule.Selector, attributeType, rule.AttributeFqn, rule.IsOpenGeneric);
+        }
+    }
 }
