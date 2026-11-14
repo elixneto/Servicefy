@@ -26,8 +26,8 @@ internal static class NamespacePredicateParser
     /// Re-parses a predicate from its source text (as kept in a value-equatable rule model).
     /// Diagnostics were already reported when the call site was collected, so they are dropped here.
     /// </summary>
-    internal static bool TryParseText(string predicateExpression, out Func<string, bool>? predicate) =>
-        TryParse(SyntaxFactory.ParseExpression(predicateExpression), out predicate, out _) && predicate is not null;
+    internal static Func<string, bool>? ParseText(string predicateExpression) =>
+        TryParse(SyntaxFactory.ParseExpression(predicateExpression), out var predicate, out _) ? predicate : null;
 
     internal static bool TryParse(ExpressionSyntax argumentExpression, out Func<string, bool>? predicate, out Diagnostic? diagnostic)
     {

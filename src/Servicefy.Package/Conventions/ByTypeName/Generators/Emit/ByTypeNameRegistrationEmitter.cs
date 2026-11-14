@@ -33,7 +33,7 @@ internal static class ByTypeNameRegistrationEmitter
         // reported (SVCFY011/012) when its call site was collected, so its rule is just skipped.
         var predicates = new Dictionary<TypeNameConventionRule, Func<string, string, bool>>();
         foreach (var rule in distinctRules)
-            if (TypeNamePredicateParser.TryParseText(rule.PredicateExpression, out var parsed) && parsed is not null)
+            if (TypeNamePredicateParser.ParseText(rule.PredicateExpression) is { } parsed)
                 predicates[rule] = parsed;
 
         distinctRules = distinctRules.Where(predicates.ContainsKey).ToList();

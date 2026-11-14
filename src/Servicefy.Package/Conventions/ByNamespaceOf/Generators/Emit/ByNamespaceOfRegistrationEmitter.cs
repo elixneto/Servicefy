@@ -34,7 +34,7 @@ internal static class ByNamespaceOfRegistrationEmitter
         // reported (SVCFY011/012) when its call site was collected, so its rule is just skipped.
         var predicates = new Dictionary<NamespaceOfConventionRule, Func<string, bool>>();
         foreach (var rule in distinctRules)
-            if (NamespacePredicateParser.TryParseText(rule.PredicateExpression, out var parsed) && parsed is not null)
+            if (NamespacePredicateParser.ParseText(rule.PredicateExpression) is { } parsed)
                 predicates[rule] = parsed;
 
         distinctRules = distinctRules.Where(predicates.ContainsKey).ToList();
