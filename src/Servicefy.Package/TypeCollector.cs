@@ -47,6 +47,30 @@ internal static class TypeCollector
 
     private static readonly ConditionalWeakTable<IAssemblySymbol, INamedTypeSymbol[]> AccessibleTypesByAssembly = new();
 
+    /// <summary>
+    /// The publicly visible types of <paramref name="assembly"/> declared in
+    /// <paramref name="rootNamespace"/> or one of its sub-namespaces — the rest of the assembly is
+    /// never walked. An empty <paramref name="rootNamespace"/> (the global namespace) means the whole
+    /// assembly. Cached per namespace symbol, for the same reason as <see cref="GetAccessibleTypes(IAssemblySymbol)"/>.
+    /// </summary>
+    internal static IReadOnlyList<INamedTypeSymbol> GetAccessibleTypes(IAssemblySymbol assembly, string rootNamespace)
+    {
+        if (rootNamespace.Length == 0) return GetAccessibleTypes(assembly);
+
+        INamespaceSymbol? ns = assembly.GlobalNamespace;
+        foreach (var segment in rootNamespace.Split('.'))
+        {
+            ns = ns.GetNamespaceMembers().FirstOrDefault(n => n.Name == segment);
+            if (ns is null) return [];
+        }
+
+        return AccessibleTypesByNamespace.GetValue(
+            ns,
+            static n => WalkNamespace(n).Where(IsExternallyAccessible).ToArray());
+    }
+
+    private static readonly ConditionalWeakTable<INamespaceSymbol, INamedTypeSymbol[]> AccessibleTypesByNamespace = new();
+
     internal static IEnumerable<IAssemblySymbol> GetProjectReferenceAssemblies(Compilation compilation) =>
         compilation.SourceModule.ReferencedAssemblySymbols
             .Where(assembly => IsProjectReference(compilation, assembly));
@@ -54,7 +78,8 @@ internal static class TypeCollector
     /// <summary>
     /// Whether <paramref name="assembly"/> was resolved from the NuGet global packages folder, i.e.
     /// comes from a <c>&lt;PackageReference&gt;</c>. Such assemblies are never scanned wholesale; a
-    /// convention may opt one in by anchoring on a type it declares (see <c>ByBaseType&lt;TBase&gt;</c>).
+    /// convention may opt one in by anchoring on a type it declares (see <c>ByBaseType&lt;TBase&gt;</c> and
+    /// <c>ByNamespaceOf&lt;TMarker&gt;</c>).
     /// </summary>
     internal static bool IsNuGetPackageAssembly(Compilation compilation, IAssemblySymbol assembly) =>
         compilation.GetMetadataReference(assembly) is PortableExecutableReference { FilePath: { } path }

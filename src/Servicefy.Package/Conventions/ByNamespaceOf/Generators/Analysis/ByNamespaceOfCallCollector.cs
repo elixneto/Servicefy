@@ -48,7 +48,9 @@ internal static class ByNamespaceOfCallCollector
 
         return (new NamespaceOfConventionRule(
             markerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-            markerType.ContainingNamespace.ToDisplayString(),
+            TypeReference.CreateId(markerType),
+            // The global namespace displays as "<global namespace>"; the root is "" (no restriction).
+            markerType.ContainingNamespace is { IsGlobalNamespace: false } ns ? ns.ToDisplayString() : "",
             arguments[0].Expression.ToString(),
             lifetime), null);
     }
